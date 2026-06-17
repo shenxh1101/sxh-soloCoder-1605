@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   Wallet,
@@ -10,12 +10,14 @@ import {
   Footprints,
   FileText,
   Scissors,
+  Check,
 } from 'lucide-react';
 import type {
   BoardingOrder,
   CareRecord,
   FeeCalculation,
   GroomingAppointment,
+  Payment,
 } from '../../shared/types';
 import {
   getBoardingById,
@@ -23,6 +25,7 @@ import {
   createCareRecord,
   getAppointments,
   calculateFee,
+  getPaymentByBoardingId,
 } from '@/utils/api';
 import { cn } from '@/lib/utils';
 
@@ -37,6 +40,23 @@ const petTypeLabel: Record<string, string> = {
   cat: '猫咪',
   other: '其他',
 };
+
+const paymentMethodMeta: Record<Payment['paymentMethod'], { label: string; emoji: string }> = {
+  cash: { label: '现金', emoji: '💵' },
+  wechat: { label: '微信', emoji: '💚' },
+  alipay: { label: '支付宝', emoji: '💙' },
+  card: { label: '银行卡', emoji: '💳' },
+};
+
+function formatDateTime(isoString: string): string {
+  const date = new Date(isoString);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
 
 const careTypeMeta: Record<
   CareRecord['type'],
@@ -78,10 +98,12 @@ function calcActualDays(checkInDate: string): number {
 
 export default function BoardingDetail() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const [order, setOrder] = useState<BoardingOrder | null>(null);
   const [careRecords, setCareRecords] = useState<CareRecord[]>([]);
   const [appointments, setAppointments] = useState<GroomingAppointment[]>([]);
   const [fee, setFee] = useState<FeeCalculation | null>(null);
+  const [payment, setPayment] = useState<Payment | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [showCareModal, setShowCareModal] = useState(false);
@@ -94,22 +116,24 @@ export default function BoardingDetail() {
   useEffect(() => {
     if (!id) return;
     loadAll();
-  }, [id]);
+  }, [id, location.key]);
 
   async function loadAll() {
     if (!id) return;
     setLoading(true);
     try {
-      const [orderData, recordsData, aptsData, feeData] = await Promise.all([
+      const [orderData, recordsData, aptsData, feeData, paymentData] = await Promise.all([
         getBoardingById(id),
-        getCareRecords(id),
+        getCareRecords({ boardingId: id }),
         getAppointments(),
         calculateFee(id).catch(() => null),
+        getPaymentByBoardingId(id).catch(() => null),
       ]);
       setOrder(orderData);
       setCareRecords(recordsData);
       setAppointments(aptsData.filter((a) => a.boardingId === id));
       setFee(feeData);
+      setPayment(paymentData);
     } catch (e) {
       console.error('Failed to load boarding detail', e);
     } finally {
@@ -208,7 +232,7 @@ export default function BoardingDetail() {
             </span>
           </div>
         </div>
-        {order.status === 'active' && (
+        {order.status === 'active' ? (
           <Link
             to={`/checkout/${id}`}
             className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-white font-medium transition-all hover:opacity-90 shadow-sm"
@@ -217,7 +241,15 @@ export default function BoardingDetail() {
             <Wallet className="w-5 h-5" />
             去结账
           </Link>
-        )}
+        ) : payment ? (
+          <Link
+            to={`/checkout/${id}`}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-mint-100 text-mint-700 font-medium transition-all hover:bg-mint-200 shadow-sm"
+          >
+            <Check className="w-5 h-5" strokeWidth={3} />
+            已结账
+          </Link>
+        ) : null}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -380,6 +412,31 @@ export default function BoardingDetail() {
                   </span>
                 </div>
               </div>
+
+              {payment && (
+                <div className="pt-4 mt-4 border-t border-cream-coffee-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-warm-text/70">结账状态</span>
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-mint-100 text-mint-700">
+                      <Check className="w-3 h-3" strokeWidth={3} />
+                      已结账
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-warm-text/70">支付方式</span>
+                    <span className="text-sm font-medium text-warm-text">
+                      {paymentMethodMeta[payment.paymentMethod].emoji}{' '}
+                      {paymentMethodMeta[payment.paymentMethod].label}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-warm-text/70">收款时间</span>
+                    <span className="text-sm font-medium text-warm-text">
+                      {formatDateTime(payment.paidAt)}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-warm-text/40">暂无费用信息</p>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Eye, Calendar, User, Phone } from 'lucide-react';
-import type { BoardingOrder, Payment } from '../../shared/types';
+import { Link, useLocation } from 'react-router-dom';
+import { Eye, Calendar, User, Phone, Scissors } from 'lucide-react';
+import type { BoardingOrder, CompletedCheckout } from '../../shared/types';
 import { getPendingCheckout, getCompletedCheckout } from '@/utils/api';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +14,7 @@ const petEmojiMap: Record<string, string> = {
 };
 
 const paymentMethodMeta: Record<
-  Payment['paymentMethod'],
+  CompletedCheckout['payment']['paymentMethod'],
   { label: string; emoji: string }
 > = {
   cash: { label: '现金', emoji: '💵' },
@@ -22,18 +22,6 @@ const paymentMethodMeta: Record<
   alipay: { label: '支付宝', emoji: '💙' },
   card: { label: '银行卡', emoji: '💳' },
 };
-
-interface CompletedCheckoutItem {
-  id: string;
-  petName: string;
-  petBreed: string;
-  checkInDate: string;
-  checkOutDate: string;
-  boardingDays: number;
-  totalAmount: number;
-  paymentMethod: Payment['paymentMethod'];
-  paidAt: string;
-}
 
 function calcActualDays(checkInDate: string): number {
   const start = new Date(checkInDate);
@@ -43,10 +31,25 @@ function calcActualDays(checkInDate: string): number {
   return Math.max(days, 1);
 }
 
+function formatDateTime(isoString: string): string {
+  const date = new Date(isoString);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
+
 export default function CheckoutList() {
-  const [activeTab, setActiveTab] = useState<TabKey>('pending');
+  const location = useLocation();
+  const initialTab: TabKey =
+    (location.state as { activeTab?: TabKey } | null)?.activeTab === 'completed'
+      ? 'completed'
+      : 'pending';
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [pendingOrders, setPendingOrders] = useState<BoardingOrder[]>([]);
-  const [completedOrders, setCompletedOrders] = useState<CompletedCheckoutItem[]>([]);
+  const [completedOrders, setCompletedOrders] = useState<CompletedCheckout[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,7 +64,7 @@ export default function CheckoutList() {
         getCompletedCheckout(),
       ]);
       setPendingOrders(pending);
-      setCompletedOrders(completed as CompletedCheckoutItem[]);
+      setCompletedOrders(completed);
     } catch (e) {
       console.error('Failed to load checkout data', e);
     } finally {
@@ -189,60 +192,79 @@ export default function CheckoutList() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {completedOrders.map((order) => {
-            const meta = paymentMethodMeta[order.paymentMethod];
+            const meta = paymentMethodMeta[order.payment.paymentMethod];
             return (
               <div
-                key={order.id}
+                key={order.boardingId}
                 className="rounded-2xl shadow-sm bg-white p-5 transition-all hover:shadow-md"
                 style={{ borderRadius: 16 }}
               >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="font-bold text-warm-text text-lg">{order.petName}</div>
-                    <div className="text-sm text-warm-text/60">{order.petBreed}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-1 min-w-0">
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
+                      style={{ backgroundColor: '#FFF8F0' }}
+                    >
+                      {petEmojiMap[order.petType] || '🐾'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-warm-text text-lg truncate">{order.petName}</div>
+                      <div className="text-sm text-warm-text/60 truncate">{order.petBreed}</div>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cream-coffee-50">
-                    <span className="text-xl">{meta.emoji}</span>
-                    <span className="text-sm font-medium text-cream-coffee-700">{meta.label}</span>
+                  <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-cream-coffee-50">
+                      <span className="text-base">{meta.emoji}</span>
+                      <span className="text-xs font-medium text-cream-coffee-700">{meta.label}</span>
+                    </div>
+                    <div
+                      className="text-2xl font-bold leading-tight"
+                      style={{ color: '#C89F7B' }}
+                    >
+                      ¥{order.payment.totalAmount}
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-warm-text/70">入住日期</span>
-                    <span className="text-warm-text font-medium">{order.checkInDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-warm-text/70">离店日期</span>
-                    <span className="text-warm-text font-medium">{order.checkOutDate}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-warm-text/70">寄养天数</span>
-                    <span className="text-warm-text font-medium">{order.boardingDays} 天</span>
-                  </div>
-                </div>
-
-                <div className="mt-4 pt-4 border-t border-cream-coffee-50">
+                <div className="mt-4 space-y-1.5 text-sm">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-xs text-warm-text/50">支付金额</div>
-                      <div
-                        className="text-3xl font-bold"
-                        style={{ color: '#C89F7B' }}
-                      >
-                        ¥{order.totalAmount}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-warm-text/50">支付时间</div>
-                      <div className="text-sm text-warm-text font-medium">{order.paidAt}</div>
-                    </div>
+                    <span className="flex items-center gap-1.5 text-warm-text/70">
+                      <User className="w-3.5 h-3.5 text-warm-text/40" />
+                      主人
+                    </span>
+                    <span className="text-warm-text font-medium">
+                      {order.ownerName} · {order.ownerPhone}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-warm-text/70">
+                      <Calendar className="w-3.5 h-3.5 text-warm-text/40" />
+                      入住 / 离店
+                    </span>
+                    <span className="text-warm-text font-medium">
+                      {order.checkInDate} → {order.checkOutDate}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-warm-text/70">
+                      <Scissors className="w-3.5 h-3.5 text-warm-text/40" />
+                      寄养 / 美容
+                    </span>
+                    <span className="text-warm-text font-medium">
+                      {order.boardingDays} 天 · {order.groomingItemsCount} 项
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-warm-text/70">收款时间</span>
+                    <span className="text-warm-text font-medium">
+                      {formatDateTime(order.payment.paidAt)}
+                    </span>
                   </div>
                 </div>
 
                 <div className="mt-4 pt-4 border-t border-cream-coffee-50">
                   <Link
-                    to={`/checkout/${order.id}`}
+                    to={`/checkout/${order.boardingId}`}
                     className="flex items-center justify-center gap-2 w-full px-5 py-2.5 rounded-xl border border-cream-coffee-200 text-warm-text/70 font-medium transition-all hover:bg-cream-coffee-50"
                   >
                     <Eye className="w-4 h-4" />

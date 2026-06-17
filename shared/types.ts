@@ -66,6 +66,20 @@ export interface Payment {
   remarks?: string;
 }
 
+export interface CompletedCheckout {
+  boardingId: string;
+  petName: string;
+  petBreed: string;
+  petType: 'dog' | 'cat' | 'other';
+  ownerName: string;
+  ownerPhone: string;
+  checkInDate: string;
+  checkOutDate: string;
+  boardingDays: number;
+  groomingItemsCount: number;
+  payment: Payment;
+}
+
 export interface ApiResponse<T> {
   success: boolean;
   data?: T;
@@ -81,6 +95,12 @@ export interface FeeCalculation {
   groomingItems: Array<{ name: string; price: number }>;
 }
 
+export interface StatisticsSummary {
+  completedBoardings: number;
+  completedGroomings: number;
+  pendingCheckout: number;
+}
+
 export interface Statistics {
   boardingByBreed: Array<{ breed: string; count: number; days: number }>;
   groomingByService: Array<{ serviceName: string; count: number }>;
@@ -90,4 +110,31 @@ export interface Statistics {
     groomingTotal: number;
     monthly: Array<{ month: string; amount: number }>;
   };
+  summary: StatisticsSummary;
+}
+
+export interface GroomingTimeSlot {
+  startTime: string;
+  endTime: string;
+}
+
+export interface GroomingPartialSlot extends GroomingTimeSlot {
+  availableCount: number;
+}
+
+export interface GroomerBusySlot extends GroomingTimeSlot {
+  petName: string;
+}
+
+export interface GroomerSchedule {
+  groomerId: string;
+  groomerName: string;
+  busySlots: GroomerBusySlot[];
+}
+
+export interface GroomingTimeSlotsResponse {
+  allGroomerCount: number;
+  availableSlots: GroomingTimeSlot[];
+  partialSlots: GroomingPartialSlot[];
+  groomerSchedules: GroomerSchedule[];
 }

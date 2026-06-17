@@ -31,6 +31,20 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     records = records.filter((r) => r.boardingId === boardingId);
   }
 
+  const date = req.query.date as string | undefined;
+  const from = req.query.from as string | undefined;
+  const to = req.query.to as string | undefined;
+
+  if (date) {
+    records = records.filter((r) => r.date === date);
+  } else if (from && to) {
+    records = records.filter((r) => r.date >= from && r.date <= to);
+  } else if (from) {
+    records = records.filter((r) => r.date >= from);
+  } else if (to) {
+    records = records.filter((r) => r.date <= to);
+  }
+
   records.sort((a, b) => {
     const dateCompare = b.date.localeCompare(a.date);
     if (dateCompare !== 0) return dateCompare;

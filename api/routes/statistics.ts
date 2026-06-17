@@ -130,6 +130,29 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
     };
   });
 
+  let completedBoardings = 0;
+  for (const b of db.data.boardingOrders) {
+    if (b.status !== 'completed') continue;
+    if (!b.checkOutDate) continue;
+    if (!isDateInMonth(b.checkOutDate, year, month)) continue;
+    completedBoardings += 1;
+  }
+
+  let completedGroomings = 0;
+  for (const apt of db.data.groomingAppointments) {
+    if (apt.status !== 'completed') continue;
+    if (!isDateInMonth(apt.appointmentDate, year, month)) continue;
+    completedGroomings += 1;
+  }
+
+  const paidBoardingIds = new Set(db.data.payments.map((p) => p.boardingId));
+  let pendingCheckout = 0;
+  for (const b of db.data.boardingOrders) {
+    if (b.status !== 'active') continue;
+    if (paidBoardingIds.has(b.id)) continue;
+    pendingCheckout += 1;
+  }
+
   res.json(
     success({
       month: monthParam,
@@ -145,6 +168,11 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
           boardingTotal: m.boardingFee,
           groomingTotal: m.groomingFee,
         })),
+      },
+      summary: {
+        completedBoardings,
+        completedGroomings,
+        pendingCheckout,
       },
     }),
   );

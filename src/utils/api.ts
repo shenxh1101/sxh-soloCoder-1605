@@ -8,6 +8,8 @@ import type {
   Payment,
   FeeCalculation,
   Statistics,
+  CompletedCheckout,
+  GroomingTimeSlotsResponse,
 } from '../../shared/types';
 
 const BASE_URL = '/api';
@@ -101,8 +103,20 @@ export async function getAvailableGroomers(date: string, startTime: string, dura
   return res.data || [];
 }
 
-export async function getCareRecords(boardingId?: string): Promise<CareRecord[]> {
-  const path = boardingId ? `/care?boardingId=${boardingId}` : '/care';
+interface GetCareRecordsParams {
+  boardingId?: string;
+  date?: string;
+  from?: string;
+  to?: string;
+}
+
+export async function getCareRecords(params?: GetCareRecordsParams): Promise<CareRecord[]> {
+  const queryParts: string[] = [];
+  if (params?.boardingId) queryParts.push(`boardingId=${params.boardingId}`);
+  if (params?.date) queryParts.push(`date=${params.date}`);
+  if (params?.from) queryParts.push(`from=${params.from}`);
+  if (params?.to) queryParts.push(`to=${params.to}`);
+  const path = queryParts.length > 0 ? `/care?${queryParts.join('&')}` : '/care';
   const res = await request<CareRecord[]>(path);
   return res.data || [];
 }
@@ -126,9 +140,14 @@ export async function getPendingCheckout(): Promise<BoardingOrder[]> {
   return res.data || [];
 }
 
-export async function getCompletedCheckout(): Promise<any[]> {
-  const res = await request<any[]>('/checkout/completed');
+export async function getCompletedCheckout(): Promise<CompletedCheckout[]> {
+  const res = await request<CompletedCheckout[]>('/checkout/completed');
   return res.data || [];
+}
+
+export async function getPaymentByBoardingId(boardingId: string): Promise<Payment | null> {
+  const res = await request<Payment>(`/checkout/payment/${boardingId}`);
+  return res.data || null;
 }
 
 export async function calculateFee(id: string): Promise<FeeCalculation> {
@@ -148,4 +167,10 @@ export async function getStatistics(month?: string): Promise<Statistics> {
   const path = month ? `/statistics?month=${month}` : '/statistics';
   const res = await request<Statistics>(path);
   return res.data as Statistics;
+}
+
+export async function getTimeSlots(date: string, duration: number): Promise<GroomingTimeSlotsResponse> {
+  const path = `/grooming/time-slots?date=${date}&duration=${duration}`;
+  const res = await request<GroomingTimeSlotsResponse>(path);
+  return res.data as GroomingTimeSlotsResponse;
 }

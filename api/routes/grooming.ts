@@ -191,4 +191,110 @@ router.get('/available', async (req: Request, res: Response): Promise<void> => {
   res.json(success(availableGroomers));
 });
 
+function generateTimeSlots(): Array<{ startTime: string; endTime: string }> {
+  const slots: Array<{ startTime: string; endTime: string }> = [];
+  const startMinutes = 9 * 60;
+  const endMinutes = 20 * 60;
+  for (let t = startMinutes; t < endMinutes; t += 30) {
+    const h = Math.floor(t / 60);
+    const m = t % 60;
+    const eh = Math.floor((t + 30) / 60);
+    const em = (t + 30) % 60;
+    slots.push({
+      startTime: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`,
+      endTime: `${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`,
+    });
+  }
+  return slots;
+}
+
+router.get('/time-slots', async (req: Request, res: Response): Promise<void> => {
+  const db = getDb();
+  db.read();
+
+  const date = req.query.date as string;
+  const duration = Number(req.query.duration);
+
+  if (!date || !duration) {
+    res.status(400).json(error('缺少必要参数: date, duration'));
+    return;
+  }
+
+  const allGroomers = db.data.groomers;
+  const allGroomerCount = allGroomers.length;
+
+  const dayAppointments = db.data.groomingAppointments.filter(
+    (a) => a.appointmentDate === date && a.status !== 'cancelled' && a.status !== 'completed',
+  );
+
+  const groomerSchedules = allGroomers.map((g) => {
+    const busySlots = dayAppointments
+      .filter((a) => a.groomerId === g.id)
+      .map((a) => ({
+        startTime: a.startTime,
+        endTime: a.endTime,
+        petName: a.petName,
+      }))
+      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
+    return {
+      groomerId: g.id,
+      groomerName: g.name,
+      busySlots,
+    };
+  });
+
+  function isGroomerBusyAt(groomerId: string, slotStart: string, slotEnd: string): boolean {
+    for (const apt of dayAppointments) {
+      if (apt.groomerId !== groomerId) continue;
+      if (timesOverlap(slotStart, slotEnd, apt.startTime, apt.endTime)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function canAccommodate(slotStartTime: string): boolean {
+    const slotStartMin = timeToMinutes(slotStartTime);
+    const slotEndMin = slotStartMin + duration;
+    if (slotEndMin > 20 * 60) return false;
+    return true;
+  }
+
+  const allSlots = generateTimeSlots();
+  const availableSlots: Array<{ startTime: string; endTime: string }> = [];
+  const partialSlots: Array<{ startTime: string; endTime: string; availableCount: number }> = [];
+
+  for (const slot of allSlots) {
+    if (!canAccommodate(slot.startTime)) continue;
+
+    const busyCount = allGroomers.filter((g) => {
+      const requiredEnd = addMinutes(slot.startTime, duration);
+      return isGroomerBusyAt(g.id, slot.startTime, requiredEnd);
+    }).length;
+    const availableCount = allGroomerCount - busyCount;
+
+    if (availableCount === allGroomerCount) {
+      availableSlots.push({
+        startTime: slot.startTime,
+        endTime: addMinutes(slot.startTime, duration),
+      });
+    } else if (availableCount > 0) {
+      partialSlots.push({
+        startTime: slot.startTime,
+        endTime: addMinutes(slot.startTime, duration),
+        availableCount,
+      });
+    }
+  }
+
+  res.json(
+    success({
+      allGroomerCount,
+      availableSlots,
+      partialSlots,
+      groomerSchedules,
+    }),
+  );
+});
+
 export default router;

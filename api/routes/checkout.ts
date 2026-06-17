@@ -27,19 +27,60 @@ router.get('/pending', async (req: Request, res: Response): Promise<void> => {
   res.json(success(pending));
 });
 
+function ceilDays(startDate: string, endDate: string): number {
+  const start = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  const diffMs = end.getTime() - start.getTime();
+  const diffDays = diffMs / (1000 * 60 * 60 * 24);
+  return Math.max(1, Math.ceil(diffDays));
+}
+
 router.get('/completed', async (req: Request, res: Response): Promise<void> => {
   const db = getDb();
   db.read();
 
   const result = db.data.payments.map((payment) => {
     const boarding = db.data.boardingOrders.find((b) => b.id === payment.boardingId);
+    if (!boarding) return null;
+
+    const checkOutDate = boarding.checkOutDate || getToday();
+    const boardingDays = ceilDays(boarding.checkInDate, checkOutDate);
+
+    const appointments = db.data.groomingAppointments.filter(
+      (a) => a.boardingId === boarding.id && a.status !== 'cancelled',
+    );
+    const groomingItemsCount = appointments.reduce((sum, apt) => sum + apt.serviceIds.length, 0);
+
     return {
-      ...boarding,
+      boardingId: boarding.id,
+      petName: boarding.petName,
+      petBreed: boarding.petBreed,
+      petType: boarding.petType,
+      ownerName: boarding.ownerName,
+      ownerPhone: boarding.ownerPhone,
+      checkInDate: boarding.checkInDate,
+      checkOutDate,
+      boardingDays,
+      groomingItemsCount,
       payment,
     };
-  });
+  }).filter(Boolean);
 
   res.json(success(result));
+});
+
+router.get('/payment/:boardingId', async (req: Request, res: Response): Promise<void> => {
+  const db = getDb();
+  db.read();
+
+  const payment = db.data.payments.find((p) => p.boardingId === req.params.boardingId);
+
+  if (!payment) {
+    res.status(404).json(error('未找到支付记录'));
+    return;
+  }
+
+  res.json(success(payment));
 });
 
 router.get('/calculate/:id', async (req: Request, res: Response): Promise<void> => {

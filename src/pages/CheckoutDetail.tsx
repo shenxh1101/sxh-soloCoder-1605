@@ -10,13 +10,20 @@ import {
   MessageSquare,
   Check,
   Loader2,
+  CreditCard,
+  Clock,
 } from 'lucide-react';
 import type {
   BoardingOrder,
   FeeCalculation,
   Payment,
 } from '../../shared/types';
-import { getBoardingById, calculateFee, pay } from '@/utils/api';
+import {
+  getBoardingById,
+  calculateFee,
+  pay,
+  getPaymentByBoardingId,
+} from '@/utils/api';
 import { cn } from '@/lib/utils';
 
 const petEmojiMap: Record<string, string> = {
@@ -38,11 +45,29 @@ const paymentMethodOptions: Array<{
   { key: 'card', label: '银行卡', emoji: '💳' },
 ];
 
+const paymentMethodMeta: Record<PaymentMethod, { label: string; emoji: string }> = {
+  cash: { label: '现金', emoji: '💵' },
+  wechat: { label: '微信', emoji: '💚' },
+  alipay: { label: '支付宝', emoji: '💙' },
+  card: { label: '银行卡', emoji: '💳' },
+};
+
+function formatDateTime(isoString: string): string {
+  const date = new Date(isoString);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const mm = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${m}-${d} ${hh}:${mm}`;
+}
+
 export default function CheckoutDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [order, setOrder] = useState<BoardingOrder | null>(null);
   const [fee, setFee] = useState<FeeCalculation | null>(null);
+  const [payment, setPayment] = useState<Payment | null>(null);
   const [discount, setDiscount] = useState<number>(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [remarks, setRemarks] = useState('');
@@ -58,12 +83,19 @@ export default function CheckoutDetail() {
     if (!id) return;
     setLoading(true);
     try {
-      const [orderData, feeData] = await Promise.all([
+      const [orderData, feeData, paymentData] = await Promise.all([
         getBoardingById(id),
         calculateFee(id),
+        getPaymentByBoardingId(id).catch(() => null),
       ]);
       setOrder(orderData);
       setFee(feeData);
+      setPayment(paymentData);
+      if (paymentData) {
+        setDiscount(paymentData.discount);
+        setPaymentMethod(paymentData.paymentMethod);
+        setRemarks(paymentData.remarks || '');
+      }
     } catch (e) {
       console.error('Failed to load checkout detail', e);
     } finally {
@@ -71,8 +103,10 @@ export default function CheckoutDetail() {
     }
   }
 
+  const isPaid = !!payment;
+
   const totalAmount = fee
-    ? Math.max(0, fee.boardingFee + fee.groomingFee - discount)
+    ? Math.max(0, fee.boardingFee + fee.groomingFee - (isPaid ? payment!.discount : discount))
     : 0;
 
   async function handlePay() {
@@ -90,7 +124,7 @@ export default function CheckoutDetail() {
         totalAmount,
       });
       alert('收款成功！');
-      navigate('/checkout');
+      navigate('/checkout', { state: { activeTab: 'completed' } });
     } catch (e) {
       console.error('Failed to pay', e);
       alert('收款失败，请重试');
@@ -125,6 +159,8 @@ export default function CheckoutDetail() {
     );
   }
 
+  const paidMeta = payment ? paymentMethodMeta[payment.paymentMethod] : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
@@ -134,7 +170,15 @@ export default function CheckoutDetail() {
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-2xl font-bold text-warm-text">结账详情</h1>
+        <div className="flex items-center gap-3 flex-1 flex-wrap">
+          <h1 className="text-2xl font-bold text-warm-text">结账详情</h1>
+          {isPaid && payment && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-mint-100 text-mint-700 text-sm font-medium">
+              <Check className="w-4 h-4" strokeWidth={3} />
+              已完成
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -146,7 +190,7 @@ export default function CheckoutDetail() {
             <h2 className="text-sm font-semibold text-warm-text/60 uppercase tracking-wide mb-5">
               订单概要
             </h2>
-            <div className="flex items-center gap-5">
+            <div className="flex items-center gap-5 flex-wrap">
               <div
                 className="w-20 h-20 rounded-full flex items-center justify-center text-4xl flex-shrink-0"
                 style={{ backgroundColor: '#FFF8F0' }}
@@ -167,14 +211,30 @@ export default function CheckoutDetail() {
                     <span className="text-warm-text/70">电话：</span>
                     <span className="text-warm-text font-medium">{order.ownerPhone}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm">
+                  <div className="flex items-center gap-2 text-sm flex-wrap">
                     <Calendar className="w-4 h-4 text-warm-text/40" />
-                    <span className="text-warm-text/70">入住日期：</span>
+                    <span className="text-warm-text/70">入住：</span>
                     <span className="text-warm-text font-medium">{order.checkInDate}</span>
+                    {order.checkOutDate && (
+                      <>
+                        <span className="text-warm-text/40">·</span>
+                        <span className="text-warm-text/70">离店：</span>
+                        <span className="text-warm-text font-medium">{order.checkOutDate}</span>
+                      </>
+                    )}
                     <span className="text-warm-text/40">·</span>
-                    <span className="text-warm-text/70">预计</span>
-                    <span className="text-warm-text font-medium">{order.plannedDays} 天</span>
+                    <span className="text-warm-text/70">寄养</span>
+                    <span className="text-warm-text font-medium">{fee.boardingDays} 天</span>
                   </div>
+                  {isPaid && payment && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="w-4 h-4 text-warm-text/40" />
+                      <span className="text-warm-text/70">收款时间：</span>
+                      <span className="text-warm-text font-medium">
+                        {formatDateTime(payment.paidAt)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -229,18 +289,22 @@ export default function CheckoutDetail() {
                   <Tag className="w-4 h-4 text-cream-coffee-500" />
                   <span className="text-warm-text">优惠金额</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-warm-text">¥</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={discount}
-                    onChange={(e) =>
-                      setDiscount(Math.max(0, Number(e.target.value) || 0))
-                    }
-                    className="w-24 px-3 py-1.5 rounded-lg border border-cream-coffee-100 bg-warm-bg text-sm text-warm-text text-right outline-none transition-all focus:border-cream-coffee-300 focus:ring-2 focus:ring-cream-coffee-100"
-                  />
-                </div>
+                {isPaid ? (
+                  <span className="text-red-400 font-medium">-¥{payment!.discount}</span>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-warm-text">¥</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={discount}
+                      onChange={(e) =>
+                        setDiscount(Math.max(0, Number(e.target.value) || 0))
+                      }
+                      className="w-24 px-3 py-1.5 rounded-lg border border-cream-coffee-100 bg-warm-bg text-sm text-warm-text text-right outline-none transition-all focus:border-cream-coffee-300 focus:ring-2 focus:ring-cream-coffee-100"
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="pt-4">
@@ -259,84 +323,142 @@ export default function CheckoutDetail() {
         </div>
 
         <div className="space-y-6">
-          <div
-            className="rounded-2xl shadow-sm bg-white p-6"
-            style={{ borderRadius: 16 }}
-          >
-            <h2 className="text-sm font-semibold text-warm-text/60 uppercase tracking-wide mb-5">
-              支付方式
-            </h2>
-            <div className="space-y-3">
-              {paymentMethodOptions.map((option) => {
-                const selected = paymentMethod === option.key;
-                return (
-                  <button
-                    key={option.key}
-                    type="button"
-                    onClick={() => setPaymentMethod(option.key)}
-                    className={cn(
-                      'w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 text-left transition-all',
-                      selected
-                        ? 'bg-mint-50'
-                        : 'bg-white hover:bg-cream-coffee-50'
-                    )}
-                    style={{
-                      borderColor: selected ? '#8FCFAD' : '#F3E7D9',
-                    }}
+          {isPaid && payment && paidMeta ? (
+            <>
+              <div
+                className="rounded-2xl shadow-sm bg-white p-6"
+                style={{ borderRadius: 16 }}
+              >
+                <h2 className="text-sm font-semibold text-warm-text/60 uppercase tracking-wide mb-5 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4" />
+                  支付方式
+                </h2>
+                <div
+                  className="flex items-center gap-3 px-4 py-3.5 rounded-xl bg-mint-50 border-2"
+                  style={{ borderColor: '#8FCFAD' }}
+                >
+                  <span className="text-2xl">{paidMeta.emoji}</span>
+                  <span className="font-medium text-mint-700 flex-1">
+                    {paidMeta.label}
+                  </span>
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: '#8FCFAD' }}
                   >
-                    <span className="text-2xl">{option.emoji}</span>
-                    <span
-                      className={cn(
-                        'font-medium flex-1',
-                        selected ? 'text-mint-700' : 'text-warm-text'
-                      )}
-                    >
-                      {option.label}
-                    </span>
-                    {selected && (
-                      <div
-                        className="w-6 h-6 rounded-full flex items-center justify-center"
-                        style={{ backgroundColor: '#8FCFAD' }}
+                    <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className="rounded-2xl shadow-sm bg-white p-6"
+                style={{ borderRadius: 16 }}
+              >
+                <h2 className="text-sm font-semibold text-warm-text/60 uppercase tracking-wide mb-4 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  备注
+                </h2>
+                {payment.remarks ? (
+                  <p className="text-sm text-warm-text leading-relaxed whitespace-pre-wrap">
+                    {payment.remarks}
+                  </p>
+                ) : (
+                  <p className="text-sm text-warm-text/40">无备注</p>
+                )}
+              </div>
+
+              <Link
+                to="/checkout"
+                state={{ activeTab: 'completed' }}
+                className="flex items-center justify-center gap-2 w-full px-6 py-4 rounded-2xl text-white font-bold text-lg transition-all hover:opacity-90 shadow-sm"
+                style={{ backgroundColor: '#C89F7B' }}
+              >
+                <ArrowLeft className="w-5 h-5" />
+                返回结账列表
+              </Link>
+            </>
+          ) : (
+            <>
+              <div
+                className="rounded-2xl shadow-sm bg-white p-6"
+                style={{ borderRadius: 16 }}
+              >
+                <h2 className="text-sm font-semibold text-warm-text/60 uppercase tracking-wide mb-5">
+                  支付方式
+                </h2>
+                <div className="space-y-3">
+                  {paymentMethodOptions.map((option) => {
+                    const selected = paymentMethod === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        onClick={() => setPaymentMethod(option.key)}
+                        className={cn(
+                          'w-full flex items-center gap-3 px-4 py-3.5 rounded-xl border-2 text-left transition-all',
+                          selected
+                            ? 'bg-mint-50'
+                            : 'bg-white hover:bg-cream-coffee-50'
+                        )}
+                        style={{
+                          borderColor: selected ? '#8FCFAD' : '#F3E7D9',
+                        }}
                       >
-                        <Check className="w-4 h-4 text-white" strokeWidth={3} />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                        <span className="text-2xl">{option.emoji}</span>
+                        <span
+                          className={cn(
+                            'font-medium flex-1',
+                            selected ? 'text-mint-700' : 'text-warm-text'
+                          )}
+                        >
+                          {option.label}
+                        </span>
+                        {selected && (
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center"
+                            style={{ backgroundColor: '#8FCFAD' }}
+                          >
+                            <Check className="w-4 h-4 text-white" strokeWidth={3} />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-          <div
-            className="rounded-2xl shadow-sm bg-white p-6"
-            style={{ borderRadius: 16 }}
-          >
-            <h2 className="text-sm font-semibold text-warm-text/60 uppercase tracking-wide mb-4 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              备注
-            </h2>
-            <textarea
-              rows={4}
-              value={remarks}
-              onChange={(e) => setRemarks(e.target.value)}
-              placeholder="可选，输入备注信息..."
-              className="w-full px-4 py-3 rounded-xl border border-cream-coffee-100 bg-warm-bg text-sm text-warm-text placeholder-warm-text/40 outline-none transition-all focus:border-cream-coffee-300 focus:ring-2 focus:ring-cream-coffee-100 resize-none"
-            />
-          </div>
+              <div
+                className="rounded-2xl shadow-sm bg-white p-6"
+                style={{ borderRadius: 16 }}
+              >
+                <h2 className="text-sm font-semibold text-warm-text/60 uppercase tracking-wide mb-4 flex items-center gap-2">
+                  <MessageSquare className="w-4 h-4" />
+                  备注
+                </h2>
+                <textarea
+                  rows={4}
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="可选，输入备注信息..."
+                  className="w-full px-4 py-3 rounded-xl border border-cream-coffee-100 bg-warm-bg text-sm text-warm-text placeholder-warm-text/40 outline-none transition-all focus:border-cream-coffee-300 focus:ring-2 focus:ring-cream-coffee-100 resize-none"
+                />
+              </div>
 
-          <button
-            onClick={handlePay}
-            disabled={submitting}
-            className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-white font-bold text-lg transition-all hover:opacity-90 disabled:opacity-50 shadow-sm"
-            style={{ backgroundColor: '#8FCFAD' }}
-          >
-            {submitting ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Check className="w-5 h-5" strokeWidth={3} />
-            )}
-            ✅ 确认收款 · ¥{totalAmount}
-          </button>
+              <button
+                onClick={handlePay}
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 px-6 py-4 rounded-2xl text-white font-bold text-lg transition-all hover:opacity-90 disabled:opacity-50 shadow-sm"
+                style={{ backgroundColor: '#8FCFAD' }}
+              >
+                {submitting ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Check className="w-5 h-5" strokeWidth={3} />
+                )}
+                ✅ 确认收款 · ¥{totalAmount}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

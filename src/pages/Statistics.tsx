@@ -200,6 +200,71 @@ export default function Statistics() {
         )}
       </div>
 
+      <div>
+        <h2 className="text-lg font-bold text-warm-text mb-3 font-quicksand flex items-center gap-2">
+          <span>📋</span> 经营概览
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loading ? (
+            <>
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </>
+          ) : (
+            <>
+              <div
+                className="relative rounded-2xl p-6 shadow-sm bg-gradient-to-br overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #B8D8F5 0%, #78A8E8 100%)' }}
+              >
+                <div className="absolute -right-2 -top-2 text-6xl opacity-20">
+                  <span>🏆</span>
+                </div>
+                <div className="relative">
+                  <div className="text-sm text-white/80 mb-2">本月完成寄养</div>
+                  <div className="text-4xl font-bold text-white font-quicksand">
+                    {data?.summary?.completedBoardings || 0}
+                  </div>
+                  <div className="text-sm text-white/70 mt-2">单</div>
+                </div>
+              </div>
+
+              <div
+                className="relative rounded-2xl p-6 shadow-sm bg-gradient-to-br overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #F5B8D8 0%, #E878A8 100%)' }}
+              >
+                <div className="absolute -right-2 -top-2 text-6xl opacity-20">
+                  <span>✂️</span>
+                </div>
+                <div className="relative">
+                  <div className="text-sm text-white/80 mb-2">本月完成美容</div>
+                  <div className="text-4xl font-bold text-white font-quicksand">
+                    {data?.summary?.completedGroomings || 0}
+                  </div>
+                  <div className="text-sm text-white/70 mt-2">单</div>
+                </div>
+              </div>
+
+              <div
+                className="relative rounded-2xl p-6 shadow-sm bg-gradient-to-br overflow-hidden"
+                style={{ background: 'linear-gradient(135deg, #F5E8B8 0%, #E8C878 100%)' }}
+              >
+                <div className="absolute -right-2 -top-2 text-6xl opacity-20">
+                  <span>⏳</span>
+                </div>
+                <div className="relative">
+                  <div className="text-sm text-white/80 mb-2">待结账订单</div>
+                  <div className="text-4xl font-bold text-white font-quicksand">
+                    {data?.summary?.pendingCheckout || 0}
+                  </div>
+                  <div className="text-sm text-white/70 mt-2">单</div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       {loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ChartSkeleton />

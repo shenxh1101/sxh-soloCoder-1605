@@ -8,6 +8,9 @@ import {
   PawPrint,
   User,
   StickyNote,
+  ChevronDown,
+  ChevronUp,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   getBoarding,
@@ -15,12 +18,14 @@ import {
   getGroomingServices,
   getGroomers,
   getAvailableGroomers,
+  getTimeSlots,
   createAppointment,
 } from '@/utils/api';
 import type {
   BoardingOrder,
   GroomingService,
   Groomer,
+  GroomingTimeSlotsResponse,
 } from '../../shared/types';
 
 function todayStr(): string {
@@ -49,6 +54,9 @@ export default function GroomingNew() {
   const [allGroomers, setAllGroomers] = useState<Groomer[]>([]);
   const [availableGroomers, setAvailableGroomers] = useState<Groomer[]>([]);
   const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [timeSlots, setTimeSlots] = useState<GroomingTimeSlotsResponse | null>(null);
+  const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
+  const [expandedGroomers, setExpandedGroomers] = useState<Set<string>>(new Set());
 
   const [selectedBoardingId, setSelectedBoardingId] = useState<string>(
     boardingIdFromUrl || '',
@@ -108,20 +116,23 @@ export default function GroomingNew() {
   useEffect(() => {
     if (!appointmentDate || !startTime || totalDuration <= 0) {
       setAvailableGroomers([]);
+      setTimeSlots(null);
       setGroomerId('');
       return;
     }
     let cancelled = false;
     setLoadingAvailable(true);
+    setLoadingTimeSlots(true);
     (async () => {
-      const list = await getAvailableGroomers(
-        appointmentDate,
-        startTime,
-        totalDuration,
-      );
+      const [list, slots] = await Promise.all([
+        getAvailableGroomers(appointmentDate, startTime, totalDuration),
+        getTimeSlots(appointmentDate, totalDuration),
+      ]);
       if (!cancelled) {
         setAvailableGroomers(list);
+        setTimeSlots(slots);
         setLoadingAvailable(false);
+        setLoadingTimeSlots(false);
         if (list.length > 0 && !list.find((g) => g.id === groomerId)) {
           setGroomerId(list[0].id);
         }
@@ -160,10 +171,26 @@ export default function GroomingNew() {
     [availableGroomers],
   );
 
+  const toggleGroomerExpand = (groomerId: string) => {
+    setExpandedGroomers((prev) => {
+      const next = new Set(prev);
+      if (next.has(groomerId)) {
+        next.delete(groomerId);
+      } else {
+        next.add(groomerId);
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedServiceIds.length === 0) {
       alert('请至少选择一项美容服务');
+      return;
+    }
+    if (availableGroomers.length === 0 && totalDuration > 0) {
+      alert('该时段暂无空闲美容师，请调整预约时间');
       return;
     }
     if (!groomerId) {
@@ -402,14 +429,109 @@ export default function GroomingNew() {
               <User className="w-5 h-5 text-mint-500" />
               美容师 <span className="text-red-500">*</span>
             </h3>
-            {loadingAvailable ? (
+            {loadingAvailable || loadingTimeSlots ? (
               <div className="text-warm-text/60 py-2">查询空闲美容师中...</div>
             ) : totalDuration <= 0 ? (
               <div className="text-warm-text/60 py-2">
                 请先选择服务项目和预约时间
               </div>
             ) : (
-              <div>
+              <div className="space-y-4">
+                {availableGroomers.length === 0 && timeSlots && (
+                  <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="w-5 h-5 text-orange-500" />
+                      <span className="font-bold text-orange-700">
+                        ⚠️ 该时段暂无空闲美容师
+                      </span>
+                    </div>
+
+                    {timeSlots.availableSlots.length > 0 && (
+                      <div className="mb-4">
+                        <div className="text-sm font-semibold text-warm-text mb-2">
+                          推荐空档（点击选择）：
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {timeSlots.availableSlots.slice(0, 5).map((slot) => (
+                            <button
+                              key={slot.startTime}
+                              type="button"
+                              onClick={() => setStartTime(slot.startTime)}
+                              className="px-3 py-1.5 rounded-lg bg-mint-100 hover:bg-mint-200 text-mint-700 text-sm font-medium transition-colors"
+                            >
+                              {slot.startTime} ~ {slot.endTime}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="text-sm font-semibold text-warm-text mb-2">
+                        美容师当日忙碌时段：
+                      </div>
+                      <div className="space-y-2">
+                        {timeSlots.groomerSchedules.map((gs) => {
+                          const expanded = expandedGroomers.has(gs.groomerId);
+                          return (
+                            <div
+                              key={gs.groomerId}
+                              className="rounded-lg border border-cream-coffee-200 overflow-hidden"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => toggleGroomerExpand(gs.groomerId)}
+                                className="w-full flex items-center justify-between px-3 py-2 bg-cream-coffee-50 hover:bg-cream-coffee-100 transition-colors"
+                              >
+                                <span className="text-sm font-medium text-warm-text">
+                                  {gs.groomerName}
+                                  {gs.busySlots.length === 0 ? (
+                                    <span className="ml-2 text-xs text-mint-600">（全天空闲）</span>
+                                  ) : (
+                                    <span className="ml-2 text-xs text-warm-text/60">
+                                      （{gs.busySlots.length} 个预约）
+                                    </span>
+                                  )}
+                                </span>
+                                {expanded ? (
+                                  <ChevronUp className="w-4 h-4 text-warm-text/60" />
+                                ) : (
+                                  <ChevronDown className="w-4 h-4 text-warm-text/60" />
+                                )}
+                              </button>
+                              {expanded && gs.busySlots.length > 0 && (
+                                <div className="px-3 py-2 space-y-1 bg-white">
+                                  {gs.busySlots.map((bs, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="flex items-center justify-between text-sm"
+                                    >
+                                      <span className="text-warm-text/70">
+                                        {bs.startTime} - {bs.endTime}
+                                      </span>
+                                      <span className="text-warm-text font-medium">
+                                        {bs.petName}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {availableGroomers.length > 0 &&
+                  availableGroomers.length < (timeSlots?.allGroomerCount || 0) &&
+                  timeSlots && (
+                    <div className="rounded-lg bg-yellow-50 border border-yellow-200 px-3 py-2 text-sm text-yellow-700">
+                      💡 该时段有 {availableGroomers.length} 位美容师空闲，共 {timeSlots.allGroomerCount} 位
+                    </div>
+                  )}
+
                 <select
                   value={groomerId}
                   onChange={(e) => setGroomerId(e.target.value)}
