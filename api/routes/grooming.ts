@@ -88,6 +88,20 @@ router.post('/appointments', async (req: Request, res: Response): Promise<void> 
 
   const startTime = req.body.startTime;
   const endTime = req.body.endTime || addMinutes(startTime, totalDuration);
+  const groomerId = req.body.groomerId;
+  const appointmentDate = req.body.appointmentDate;
+
+  const hasConflict = db.data.groomingAppointments.some((apt) => {
+    if (apt.groomerId !== groomerId) return false;
+    if (apt.appointmentDate !== appointmentDate) return false;
+    if (apt.status === 'cancelled' || apt.status === 'completed') return false;
+    return timesOverlap(startTime, endTime, apt.startTime, apt.endTime);
+  });
+
+  if (hasConflict) {
+    res.status(400).json(error('该美容师在该时段已有预约，请更换时间或美容师'));
+    return;
+  }
 
   const id = 'a' + Date.now();
   const newApt: GroomingAppointment = {
@@ -96,8 +110,8 @@ router.post('/appointments', async (req: Request, res: Response): Promise<void> 
     petName: req.body.petName,
     petBreed: req.body.petBreed,
     serviceIds,
-    groomerId: req.body.groomerId,
-    appointmentDate: req.body.appointmentDate,
+    groomerId,
+    appointmentDate,
     startTime,
     endTime,
     status: req.body.status || 'pending',

@@ -10,6 +10,8 @@ import type {
   Statistics,
   CompletedCheckout,
   GroomingTimeSlotsResponse,
+  ReceiptData,
+  Trend30DaysResponse,
 } from '../../shared/types';
 
 const BASE_URL = '/api';
@@ -173,4 +175,14 @@ export async function getTimeSlots(date: string, duration: number): Promise<Groo
   const path = `/grooming/time-slots?date=${date}&duration=${duration}`;
   const res = await request<GroomingTimeSlotsResponse>(path);
   return res.data as GroomingTimeSlotsResponse;
+}
+
+export async function getReceipt(boardingId: string): Promise<ReceiptData> {
+  const res = await request<ReceiptData>(`/checkout/receipt/${boardingId}`);
+  return res.data as ReceiptData;
+}
+
+export async function getTrend30Days(): Promise<Trend30DaysResponse> {
+  const res = await request<Trend30DaysResponse>('/statistics/trend-30days');
+  return res.data as Trend30DaysResponse;
 }

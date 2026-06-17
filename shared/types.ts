@@ -138,3 +138,36 @@ export interface GroomingTimeSlotsResponse {
   partialSlots: GroomingPartialSlot[];
   groomerSchedules: GroomerSchedule[];
 }
+
+export interface ReceiptData {
+  boardingId: string;
+  petName: string;
+  petBreed: string;
+  petType: 'dog' | 'cat' | 'other';
+  ownerName: string;
+  ownerPhone: string;
+  checkInDate: string;
+  checkOutDate: string;
+  boardingDays: number;
+  dailyPrice: number;
+  boardingFee: number;
+  groomingItems: Array<{ serviceName: string; price: number }>;
+  groomingFee: number;
+  discount: number;
+  totalAmount: number;
+  paymentMethod: 'cash' | 'wechat' | 'alipay' | 'card';
+  paidAt: string;
+  remarks?: string;
+}
+
+export interface Trend30DaysItem {
+  date: string;
+  revenue: number;
+  completedBoardings: number;
+  completedGroomings: number;
+  pendingCheckout: number;
+}
+
+export interface Trend30DaysResponse {
+  daily: Trend30DaysItem[];
+}

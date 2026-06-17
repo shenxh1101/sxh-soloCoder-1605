@@ -178,4 +178,77 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
   );
 });
 
+function formatDate(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+router.get('/trend-30days', async (req: Request, res: Response): Promise<void> => {
+  const db = getDb();
+  db.read();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const daily: Array<{
+    date: string;
+    revenue: number;
+    completedBoardings: number;
+    completedGroomings: number;
+    pendingCheckout: number;
+  }> = [];
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dateStr = formatDate(d);
+
+    let revenue = 0;
+    for (const p of db.data.payments) {
+      const paidDate = formatDate(new Date(p.paidAt));
+      if (paidDate === dateStr) {
+        revenue += p.totalAmount;
+      }
+    }
+
+    let completedBoardings = 0;
+    for (const b of db.data.boardingOrders) {
+      if (b.status !== 'completed') continue;
+      if (b.checkOutDate === dateStr) {
+        completedBoardings += 1;
+      }
+    }
+
+    let completedGroomings = 0;
+    for (const apt of db.data.groomingAppointments) {
+      if (apt.status !== 'completed') continue;
+      if (apt.appointmentDate === dateStr) {
+        completedGroomings += 1;
+      }
+    }
+
+    const paidBoardingIds = new Set(db.data.payments.map((p) => p.boardingId));
+    let pendingCheckout = 0;
+    for (const b of db.data.boardingOrders) {
+      if (b.status !== 'active') continue;
+      if (paidBoardingIds.has(b.id)) continue;
+      if (b.checkInDate <= dateStr) {
+        pendingCheckout += 1;
+      }
+    }
+
+    daily.push({
+      date: dateStr,
+      revenue,
+      completedBoardings,
+      completedGroomings,
+      pendingCheckout,
+    });
+  }
+
+  res.json(success({ daily }));
+});
+
 export default router;

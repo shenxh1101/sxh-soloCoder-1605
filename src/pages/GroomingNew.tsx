@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
   Scissors,
@@ -47,7 +47,9 @@ function addMinutes(time: string, minutes: number): string {
 export default function GroomingNew() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const boardingIdFromUrl = searchParams.get('boardingId');
+  const prefillState = location.state as { date?: string; startTime?: string } | null;
 
   const [boardingOrders, setBoardingOrders] = useState<BoardingOrder[]>([]);
   const [services, setServices] = useState<GroomingService[]>([]);
@@ -65,11 +67,12 @@ export default function GroomingNew() {
   const [petName, setPetName] = useState('');
   const [petBreed, setPetBreed] = useState('');
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
-  const [appointmentDate, setAppointmentDate] = useState(todayStr());
-  const [startTime, setStartTime] = useState('10:00');
+  const [appointmentDate, setAppointmentDate] = useState(prefillState?.date || todayStr());
+  const [startTime, setStartTime] = useState(prefillState?.startTime || '10:00');
   const [groomerId, setGroomerId] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const prevAvailableGroomerIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     (async () => {
@@ -117,7 +120,7 @@ export default function GroomingNew() {
     if (!appointmentDate || !startTime || totalDuration <= 0) {
       setAvailableGroomers([]);
       setTimeSlots(null);
-      setGroomerId('');
+      prevAvailableGroomerIdsRef.current = new Set();
       return;
     }
     let cancelled = false;
@@ -129,13 +132,19 @@ export default function GroomingNew() {
         getTimeSlots(appointmentDate, totalDuration),
       ]);
       if (!cancelled) {
+        const newAvailableIds = new Set(list.map((g) => g.id));
+        const prevIds = prevAvailableGroomerIdsRef.current;
+        if (groomerId && prevIds.has(groomerId) && !newAvailableIds.has(groomerId)) {
+          setGroomerId('');
+          alert('当前选中的美容师已变忙，请重新选择');
+        } else if (list.length > 0 && !newAvailableIds.has(groomerId)) {
+          setGroomerId(list[0].id);
+        }
+        prevAvailableGroomerIdsRef.current = newAvailableIds;
         setAvailableGroomers(list);
         setTimeSlots(slots);
         setLoadingAvailable(false);
         setLoadingTimeSlots(false);
-        if (list.length > 0 && !list.find((g) => g.id === groomerId)) {
-          setGroomerId(list[0].id);
-        }
       }
     })();
     return () => {
@@ -195,6 +204,10 @@ export default function GroomingNew() {
     }
     if (!groomerId) {
       alert('请选择美容师');
+      return;
+    }
+    if (!availableGroomerIds.has(groomerId)) {
+      alert('当前选中的美容师已变忙，请重新选择');
       return;
     }
     if (isWalkIn && (!petName.trim() || !petBreed.trim())) {
@@ -541,8 +554,8 @@ export default function GroomingNew() {
                   {allGroomers.map((g) => {
                     const isAvailable = availableGroomerIds.has(g.id);
                     return (
-                      <option key={g.id} value={g.id}>
-                        {g.name}（{isAvailable ? '空闲' : '忙碌'}）
+                      <option key={g.id} value={g.id} disabled={!isAvailable}>
+                        {g.name}（{isAvailable ? '空闲' : '忙碌，不可选'}）
                       </option>
                     );
                   })}

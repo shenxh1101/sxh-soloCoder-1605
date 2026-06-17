@@ -11,9 +11,10 @@ import {
   LineChart,
   Line,
   Legend,
+  ComposedChart,
 } from 'recharts';
-import { getStatistics } from '../utils/api';
-import type { Statistics as StatisticsType } from '../../shared/types';
+import { getStatistics, getTrend30Days } from '../utils/api';
+import type { Statistics as StatisticsType, Trend30DaysResponse } from '../../shared/types';
 
 function getCurrentMonth(): string {
   const date = new Date();
@@ -52,10 +53,17 @@ function ChartSkeleton() {
   );
 }
 
+function formatDateShort(dateStr: string): string {
+  const parts = dateStr.split('-');
+  return `${parts[1]}/${parts[2]}`;
+}
+
 export default function Statistics() {
   const [month, setMonth] = useState(getCurrentMonth());
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<StatisticsType | null>(null);
+  const [trendLoading, setTrendLoading] = useState(true);
+  const [trendData, setTrendData] = useState<Trend30DaysResponse | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -72,6 +80,22 @@ export default function Statistics() {
     }
     fetchData();
   }, [month]);
+
+  useEffect(() => {
+    async function fetchTrend() {
+      setTrendLoading(true);
+      try {
+        const res = await getTrend30Days();
+        setTrendData(res);
+      } catch (err) {
+        console.error('Trend fetch error:', err);
+        setTrendData(null);
+      } finally {
+        setTrendLoading(false);
+      }
+    }
+    fetchTrend();
+  }, []);
 
   const boardingData = useMemo(() => {
     if (!data?.boardingByBreed) return [];
@@ -437,6 +461,127 @@ export default function Statistics() {
                     activeDot={{ r: 8, fill: '#C89F7B', stroke: '#FFF8F0', strokeWidth: 3 }}
                   />
                 </LineChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-warm-text mb-4 font-quicksand flex items-center gap-2">
+              <span>📈</span> 最近30天经营趋势
+            </h3>
+            {trendLoading ? (
+              <ChartSkeleton />
+            ) : !trendData?.daily || trendData.daily.length === 0 ? (
+              <div className="h-80 flex flex-col items-center justify-center text-warm-text/50">
+                <div className="text-4xl mb-2">
+                  <span>📊</span>
+                </div>
+                <p>暂无趋势数据</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={360}>
+                <ComposedChart
+                  data={trendData.daily.map((d) => ({
+                    ...d,
+                    dateLabel: formatDateShort(d.date),
+                  }))}
+                  margin={{ top: 10, right: 40, left: 10, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="mintBarGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#A2DBC1" />
+                      <stop offset="100%" stopColor="#8FCFAD" />
+                    </linearGradient>
+                    <linearGradient id="orangeBarGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#F5C28C" />
+                      <stop offset="100%" stopColor="#E8A878" />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F3E7D9" vertical={false} />
+                  <XAxis
+                    dataKey="dateLabel"
+                    tick={{ fill: '#6B5B4F', fontSize: 11 }}
+                    axisLine={{ stroke: '#E7D0B3' }}
+                    tickLine={false}
+                    interval={Math.floor(trendData.daily.length / 10)}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    tick={{ fill: '#6B5B4F', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(value) => `¥${value}`}
+                    label={{ value: '收入', angle: -90, position: 'insideLeft', fill: '#6B5B4F', fontSize: 12 }}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fill: '#6B5B4F', fontSize: 12 }}
+                    axisLine={false}
+                    tickLine={false}
+                    label={{ value: '数量', angle: 90, position: 'insideRight', fill: '#6B5B4F', fontSize: 12 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#FFF8F0',
+                      border: 'none',
+                      borderRadius: 12,
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                    }}
+                    labelStyle={{ color: '#6B5B4F', fontWeight: 600 }}
+                    formatter={(value: number, name: string) => {
+                      const labelMap: Record<string, string> = {
+                        revenue: '收入金额',
+                        completedBoardings: '寄养完成',
+                        completedGroomings: '美容完成',
+                        pendingCheckout: '待结账',
+                      };
+                      const unit = name === 'revenue' ? `¥${formatCurrency(value)}` : `${value} 单`;
+                      return [unit, labelMap[name] || name];
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ paddingTop: 16 }}
+                    iconType="circle"
+                  />
+                  <Bar
+                    yAxisId="right"
+                    dataKey="completedBoardings"
+                    name="寄养完成"
+                    fill="url(#mintBarGradient)"
+                    radius={[4, 4, 0, 0]}
+                    barSize={14}
+                  />
+                  <Bar
+                    yAxisId="right"
+                    dataKey="completedGroomings"
+                    name="美容完成"
+                    fill="url(#orangeBarGradient)"
+                    radius={[4, 4, 0, 0]}
+                    barSize={14}
+                  />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="revenue"
+                    name="收入金额"
+                    stroke="#C89F7B"
+                    strokeWidth={2.5}
+                    dot={{ fill: '#C89F7B', strokeWidth: 2, r: 3, stroke: '#FFF8F0' }}
+                    activeDot={{ r: 6, fill: '#C89F7B', stroke: '#FFF8F0', strokeWidth: 2 }}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="pendingCheckout"
+                    name="待结账"
+                    stroke="#A0A0A0"
+                    strokeWidth={2}
+                    strokeDasharray="5 5"
+                    dot={{ fill: '#A0A0A0', strokeWidth: 2, r: 3, stroke: '#FFF8F0' }}
+                    activeDot={{ r: 6, fill: '#A0A0A0', stroke: '#FFF8F0', strokeWidth: 2 }}
+                  />
+                </ComposedChart>
               </ResponsiveContainer>
             )}
           </div>

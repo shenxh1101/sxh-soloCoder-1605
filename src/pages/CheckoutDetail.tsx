@@ -124,7 +124,7 @@ export default function CheckoutDetail() {
         totalAmount,
       });
       alert('收款成功！');
-      navigate('/checkout', { state: { activeTab: 'completed' } });
+      navigate(`/receipt/${id}`);
     } catch (e) {
       console.error('Failed to pay', e);
       alert('收款失败，请重试');
@@ -368,10 +368,18 @@ export default function CheckoutDetail() {
               </div>
 
               <Link
+                to={`/receipt/${id}`}
+                className="flex items-center justify-center gap-2 w-full px-6 py-4 rounded-2xl text-white font-bold text-lg transition-all hover:opacity-90 shadow-sm"
+                style={{ backgroundColor: '#8FCFAD' }}
+              >
+                📋 查看收款小票
+              </Link>
+
+              <Link
                 to="/checkout"
                 state={{ activeTab: 'completed' }}
-                className="flex items-center justify-center gap-2 w-full px-6 py-4 rounded-2xl text-white font-bold text-lg transition-all hover:opacity-90 shadow-sm"
-                style={{ backgroundColor: '#C89F7B' }}
+                className="flex items-center justify-center gap-2 w-full px-6 py-4 rounded-2xl font-bold text-lg transition-all hover:opacity-90 shadow-sm border-2"
+                style={{ backgroundColor: 'white', color: '#C89F7B', borderColor: '#E7D0B3' }}
               >
                 <ArrowLeft className="w-5 h-5" />
                 返回结账列表

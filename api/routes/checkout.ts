@@ -142,4 +142,63 @@ router.post('/pay', async (req: Request, res: Response): Promise<void> => {
   res.json(success({ payment, boarding: db.data.boardingOrders[boardingIdx] }));
 });
 
+router.get('/receipt/:boardingId', async (req: Request, res: Response): Promise<void> => {
+  const db = getDb();
+  db.read();
+
+  const { boardingId } = req.params;
+
+  const boarding = db.data.boardingOrders.find((b) => b.id === boardingId);
+  if (!boarding) {
+    res.status(404).json(error('订单不存在'));
+    return;
+  }
+
+  const payment = db.data.payments.find((p) => p.boardingId === boardingId);
+  if (!payment) {
+    res.status(404).json(error('尚未支付，无法生成小票'));
+    return;
+  }
+
+  const appointments = db.data.groomingAppointments.filter(
+    (a) => a.boardingId === boardingId && a.status === 'completed',
+  );
+
+  const groomingItems: Array<{ serviceName: string; price: number }> = [];
+  for (const apt of appointments) {
+    for (const serviceId of apt.serviceIds) {
+      const svc = db.data.groomingServices.find((s) => s.id === serviceId);
+      if (svc) {
+        groomingItems.push({ serviceName: svc.name, price: svc.price });
+      }
+    }
+  }
+
+  const checkOutDate = boarding.checkOutDate || getToday();
+  const boardingDays = ceilDays(boarding.checkInDate, checkOutDate);
+
+  res.json(
+    success({
+      boardingId,
+      petName: boarding.petName,
+      petBreed: boarding.petBreed,
+      petType: boarding.petType,
+      ownerName: boarding.ownerName,
+      ownerPhone: boarding.ownerPhone,
+      checkInDate: boarding.checkInDate,
+      checkOutDate,
+      boardingDays,
+      dailyPrice: boarding.dailyPrice,
+      boardingFee: payment.boardingFee,
+      groomingItems,
+      groomingFee: payment.groomingFee,
+      discount: payment.discount,
+      totalAmount: payment.totalAmount,
+      paymentMethod: payment.paymentMethod,
+      paidAt: payment.paidAt,
+      remarks: payment.remarks,
+    }),
+  );
+});
+
 export default router;
