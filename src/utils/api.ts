@@ -1,0 +1,151 @@
+import type {
+  ApiResponse,
+  BoardingOrder,
+  Groomer,
+  GroomingAppointment,
+  GroomingService,
+  CareRecord,
+  Payment,
+  FeeCalculation,
+  Statistics,
+} from '../../shared/types';
+
+const BASE_URL = '/api';
+
+async function request<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
+  const url = `${BASE_URL}${path}`;
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(options?.headers || {}),
+    },
+    ...options,
+  });
+  const data = await response.json();
+  return data as ApiResponse<T>;
+}
+
+export async function getBoarding(status?: 'active' | 'completed'): Promise<BoardingOrder[]> {
+  const path = status ? `/boarding?status=${status}` : '/boarding';
+  const res = await request<BoardingOrder[]>(path);
+  return res.data || [];
+}
+
+export async function getBoardingById(id: string): Promise<BoardingOrder> {
+  const res = await request<BoardingOrder>(`/boarding/${id}`);
+  return res.data as BoardingOrder;
+}
+
+export async function createBoarding(data: Omit<BoardingOrder, 'id' | 'createdAt'>): Promise<BoardingOrder> {
+  const res = await request<BoardingOrder>('/boarding', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return res.data as BoardingOrder;
+}
+
+export async function updateBoarding(id: string, data: Partial<BoardingOrder>): Promise<BoardingOrder> {
+  const res = await request<BoardingOrder>(`/boarding/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  return res.data as BoardingOrder;
+}
+
+export async function deleteBoarding(id: string): Promise<void> {
+  await request<void>(`/boarding/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getGroomers(): Promise<Groomer[]> {
+  const res = await request<Groomer[]>('/grooming/groomers');
+  return res.data || [];
+}
+
+export async function getGroomingServices(): Promise<GroomingService[]> {
+  const res = await request<GroomingService[]>('/grooming/services');
+  return res.data || [];
+}
+
+export async function getAppointments(date?: string): Promise<GroomingAppointment[]> {
+  const path = date ? `/grooming/appointments?date=${date}` : '/grooming/appointments';
+  const res = await request<GroomingAppointment[]>(path);
+  return res.data || [];
+}
+
+export async function createAppointment(data: Omit<GroomingAppointment, 'id'>): Promise<GroomingAppointment> {
+  const res = await request<GroomingAppointment>('/grooming/appointments', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return res.data as GroomingAppointment;
+}
+
+export async function updateAppointment(id: string, data: Partial<GroomingAppointment>): Promise<void> {
+  await request<void>(`/grooming/appointments/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteAppointment(id: string): Promise<void> {
+  await request<void>(`/grooming/appointments/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getAvailableGroomers(date: string, startTime: string, duration: number): Promise<Groomer[]> {
+  const path = `/grooming/available?date=${date}&startTime=${startTime}&duration=${duration}`;
+  const res = await request<Groomer[]>(path);
+  return res.data || [];
+}
+
+export async function getCareRecords(boardingId?: string): Promise<CareRecord[]> {
+  const path = boardingId ? `/care?boardingId=${boardingId}` : '/care';
+  const res = await request<CareRecord[]>(path);
+  return res.data || [];
+}
+
+export async function createCareRecord(data: Omit<CareRecord, 'id'>): Promise<CareRecord> {
+  const res = await request<CareRecord>('/care', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return res.data as CareRecord;
+}
+
+export async function deleteCareRecord(id: string): Promise<void> {
+  await request<void>(`/care/${id}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function getPendingCheckout(): Promise<BoardingOrder[]> {
+  const res = await request<BoardingOrder[]>('/checkout/pending');
+  return res.data || [];
+}
+
+export async function getCompletedCheckout(): Promise<any[]> {
+  const res = await request<any[]>('/checkout/completed');
+  return res.data || [];
+}
+
+export async function calculateFee(id: string): Promise<FeeCalculation> {
+  const res = await request<FeeCalculation>(`/checkout/calculate/${id}`);
+  return res.data as FeeCalculation;
+}
+
+export async function pay(data: Omit<Payment, 'id' | 'paidAt'>): Promise<Payment> {
+  const res = await request<Payment>('/checkout/pay', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return res.data as Payment;
+}
+
+export async function getStatistics(month?: string): Promise<Statistics> {
+  const path = month ? `/statistics?month=${month}` : '/statistics';
+  const res = await request<Statistics>(path);
+  return res.data as Statistics;
+}
