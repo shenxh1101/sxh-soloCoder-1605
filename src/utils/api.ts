@@ -12,6 +12,10 @@ import type {
   GroomingTimeSlotsResponse,
   ReceiptData,
   Trend30DaysResponse,
+  Customer,
+  CustomerProfile,
+  CustomerDetail,
+  CustomerRepurchaseStats,
 } from '../../shared/types';
 
 const BASE_URL = '/api';
@@ -26,7 +30,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<ApiRespo
     ...options,
   });
   const data = await response.json();
-  return data as ApiResponse<T>;
+  return { ...(data as ApiResponse<T>), status: response.status } as ApiResponse<T> & { status: number };
 }
 
 export async function getBoarding(status?: 'active' | 'completed'): Promise<BoardingOrder[]> {
@@ -185,4 +189,41 @@ export async function getReceipt(boardingId: string): Promise<ReceiptData> {
 export async function getTrend30Days(): Promise<Trend30DaysResponse> {
   const res = await request<Trend30DaysResponse>('/statistics/trend-30days');
   return res.data as Trend30DaysResponse;
+}
+
+export async function getCustomers(search?: string): Promise<CustomerProfile[]> {
+  const path = search ? `/customers?search=${encodeURIComponent(search)}` : '/customers';
+  const res = await request<CustomerProfile[]>(path);
+  return res.data || [];
+}
+
+export async function getCustomerByPhone(phone: string): Promise<CustomerDetail | null> {
+  const res = await request<CustomerDetail>(`/customers/${encodeURIComponent(phone)}`);
+  return res.data || null;
+}
+
+export async function updateCustomer(phone: string, data: { tags: string[]; notes: string }): Promise<Customer> {
+  const res = await request<Customer>(`/customers/${encodeURIComponent(phone)}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  return res.data as Customer;
+}
+
+export async function getRepurchaseStats(): Promise<CustomerRepurchaseStats> {
+  const res = await request<CustomerRepurchaseStats>('/statistics/repurchase-30days');
+  return res.data as CustomerRepurchaseStats;
+}
+
+export async function createAppointmentWithStatus(data: Omit<GroomingAppointment, 'id'>): Promise<{ appointment: GroomingAppointment | null; status: number; error?: string }> {
+  const res = await request<GroomingAppointment>('/grooming/appointments', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const status = (res as unknown as { status: number }).status || 200;
+  return {
+    appointment: res.data || null,
+    status,
+    error: res.error,
+  };
 }

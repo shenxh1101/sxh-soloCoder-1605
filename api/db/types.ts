@@ -5,6 +5,7 @@ import type {
   GroomingAppointment,
   CareRecord,
   Payment,
+  Customer,
 } from '../../shared/types.js';
 
 export interface Database {
@@ -14,4 +15,5 @@ export interface Database {
   groomingAppointments: GroomingAppointment[];
   careRecords: CareRecord[];
   payments: Payment[];
+  customers: Customer[];
 }

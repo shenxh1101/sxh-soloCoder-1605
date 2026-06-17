@@ -99,7 +99,7 @@ router.post('/appointments', async (req: Request, res: Response): Promise<void> 
   });
 
   if (hasConflict) {
-    res.status(400).json(error('该美容师在该时段已有预约，请更换时间或美容师'));
+    res.status(409).json(error('该美容师在该时段已有预约，请更换时间或美容师'));
     return;
   }
 

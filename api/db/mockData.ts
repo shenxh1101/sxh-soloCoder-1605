@@ -1,6 +1,43 @@
 import type { Database } from './types.js';
 
 export const mockData: Database = {
+  customers: [
+    {
+      ownerPhone: '13800138000',
+      ownerName: '张先生',
+      tags: ['常客'],
+      notes: '老客户，服务需求稳定',
+      createdAt: '2026-05-01T10:00:00.000Z',
+    },
+    {
+      ownerPhone: '13900139000',
+      ownerName: '李女士',
+      tags: ['敏感体质'],
+      notes: '宠物皮肤敏感，需使用特殊洗护产品',
+      createdAt: '2026-05-05T14:30:00.000Z',
+    },
+    {
+      ownerPhone: '13700137000',
+      ownerName: '王女士',
+      tags: [],
+      notes: '宠物对鸡肉过敏',
+      createdAt: '2026-05-10T09:00:00.000Z',
+    },
+    {
+      ownerPhone: '13600136000',
+      ownerName: '陈先生',
+      tags: ['需要回访'],
+      notes: '需要定期回访确认宠物健康状况',
+      createdAt: '2026-05-15T16:00:00.000Z',
+    },
+    {
+      ownerPhone: '13500135000',
+      ownerName: '刘女士',
+      tags: [],
+      notes: '宠物喜欢安静环境',
+      createdAt: '2026-05-08T11:20:00.000Z',
+    },
+  ],
   groomers: [
     {
       id: 'g1',

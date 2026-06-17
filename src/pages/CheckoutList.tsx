@@ -152,12 +152,22 @@ export default function CheckoutList() {
                     <div className="flex items-center gap-2 text-sm">
                       <User className="w-4 h-4 text-warm-text/40" />
                       <span className="text-warm-text/70">主人：</span>
-                      <span className="text-warm-text font-medium">{order.ownerName}</span>
+                      <Link
+                        to={`/customers/${encodeURIComponent(order.ownerPhone)}`}
+                        className="text-mint-600 font-medium hover:underline"
+                      >
+                        {order.ownerName}
+                      </Link>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Phone className="w-4 h-4 text-warm-text/40" />
                       <span className="text-warm-text/70">电话：</span>
-                      <span className="text-warm-text font-medium">{order.ownerPhone}</span>
+                      <Link
+                        to={`/customers/${encodeURIComponent(order.ownerPhone)}`}
+                        className="text-mint-600 font-medium hover:underline"
+                      >
+                        {order.ownerPhone}
+                      </Link>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
                       <Calendar className="w-4 h-4 text-warm-text/40" />
@@ -232,9 +242,12 @@ export default function CheckoutList() {
                       <User className="w-3.5 h-3.5 text-warm-text/40" />
                       主人
                     </span>
-                    <span className="text-warm-text font-medium">
+                    <Link
+                      to={`/customers/${encodeURIComponent(order.ownerPhone)}`}
+                      className="text-mint-600 font-medium hover:underline"
+                    >
                       {order.ownerName} · {order.ownerPhone}
-                    </span>
+                    </Link>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-warm-text/70">

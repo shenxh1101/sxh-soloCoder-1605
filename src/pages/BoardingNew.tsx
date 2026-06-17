@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Send } from 'lucide-react';
+import { ArrowLeft, Send, AlertTriangle } from 'lucide-react';
 import type { BoardingOrder } from '../../shared/types';
-import { createBoarding } from '@/utils/api';
+import { createBoarding, getCustomerByPhone } from '@/utils/api';
 import { cn } from '@/lib/utils';
 
 type PetType = BoardingOrder['petType'];
@@ -48,6 +48,7 @@ interface FormErrors {
 export default function BoardingNew() {
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [customerTags, setCustomerTags] = useState<string[]>([]);
   const [form, setForm] = useState<FormState>({
     petName: '',
     petType: 'dog',
@@ -61,6 +62,30 @@ export default function BoardingNew() {
     specialNeeds: '',
   });
   const [errors, setErrors] = useState<FormErrors>({});
+
+  useEffect(() => {
+    const phone = form.ownerPhone.trim();
+    if (!phone) {
+      setCustomerTags([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const customer = await getCustomerByPhone(phone);
+        if (!cancelled && customer && customer.tags.length > 0) {
+          setCustomerTags(customer.tags);
+        } else if (!cancelled) {
+          setCustomerTags([]);
+        }
+      } catch {
+        if (!cancelled) setCustomerTags([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.ownerPhone]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -141,6 +166,27 @@ export default function BoardingNew() {
         className="rounded-2xl shadow-sm bg-white p-8"
         style={{ borderRadius: 16 }}
       >
+        {customerTags.length > 0 && (
+          <div className="mb-6 rounded-xl border-2 border-orange-200 bg-orange-50 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-orange-700 mb-2">客户标签提醒</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {customerTags.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6">
           <div>
             <label className={labelClass}>

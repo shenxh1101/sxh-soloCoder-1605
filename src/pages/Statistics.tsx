@@ -13,8 +13,8 @@ import {
   Legend,
   ComposedChart,
 } from 'recharts';
-import { getStatistics, getTrend30Days } from '../utils/api';
-import type { Statistics as StatisticsType, Trend30DaysResponse } from '../../shared/types';
+import { getStatistics, getTrend30Days, getRepurchaseStats } from '../utils/api';
+import type { Statistics as StatisticsType, Trend30DaysResponse, CustomerRepurchaseStats } from '../../shared/types';
 
 function getCurrentMonth(): string {
   const date = new Date();
@@ -64,6 +64,8 @@ export default function Statistics() {
   const [data, setData] = useState<StatisticsType | null>(null);
   const [trendLoading, setTrendLoading] = useState(true);
   const [trendData, setTrendData] = useState<Trend30DaysResponse | null>(null);
+  const [repurchaseLoading, setRepurchaseLoading] = useState(true);
+  const [repurchaseData, setRepurchaseData] = useState<CustomerRepurchaseStats | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -95,6 +97,22 @@ export default function Statistics() {
       }
     }
     fetchTrend();
+  }, []);
+
+  useEffect(() => {
+    async function fetchRepurchase() {
+      setRepurchaseLoading(true);
+      try {
+        const res = await getRepurchaseStats();
+        setRepurchaseData(res);
+      } catch (err) {
+        console.error('Repurchase fetch error:', err);
+        setRepurchaseData(null);
+      } finally {
+        setRepurchaseLoading(false);
+      }
+    }
+    fetchRepurchase();
   }, []);
 
   const boardingData = useMemo(() => {
@@ -583,6 +601,189 @@ export default function Statistics() {
                   />
                 </ComposedChart>
               </ResponsiveContainer>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-warm-text mb-4 font-quicksand flex items-center gap-2">
+              <span>📊</span> 客户复购情况
+            </h3>
+            {repurchaseLoading ? (
+              <ChartSkeleton />
+            ) : !repurchaseData ? (
+              <div className="h-80 flex flex-col items-center justify-center text-warm-text/50">
+                <div className="text-4xl mb-2">
+                  <span>📊</span>
+                </div>
+                <p>暂无复购数据</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div
+                    className="relative rounded-xl p-4 shadow-sm bg-gradient-to-br overflow-hidden"
+                    style={{ background: 'linear-gradient(135deg, #C8E6D4 0%, #8FCFAD 100%)' }}
+                  >
+                    <div className="relative">
+                      <div className="text-xs text-white/80 mb-1">近30天新客</div>
+                      <div className="text-2xl font-bold text-white font-quicksand">
+                        {repurchaseData.newCustomers30d}
+                      </div>
+                      <div className="text-xs text-white/70 mt-1">人</div>
+                    </div>
+                  </div>
+                  <div
+                    className="relative rounded-xl p-4 shadow-sm bg-gradient-to-br overflow-hidden"
+                    style={{ background: 'linear-gradient(135deg, #E8D5C4 0%, #D4B896 100%)' }}
+                  >
+                    <div className="relative">
+                      <div className="text-xs text-white/80 mb-1">近30天老客</div>
+                      <div className="text-2xl font-bold text-white font-quicksand">
+                        {repurchaseData.returningCustomers30d}
+                      </div>
+                      <div className="text-xs text-white/70 mt-1">人</div>
+                    </div>
+                  </div>
+                  <div
+                    className="relative rounded-xl p-4 shadow-sm bg-gradient-to-br overflow-hidden"
+                    style={{ background: 'linear-gradient(135deg, #D4C8E8 0%, #A896D4 100%)' }}
+                  >
+                    <div className="relative">
+                      <div className="text-xs text-white/80 mb-1">复购次数</div>
+                      <div className="text-2xl font-bold text-white font-quicksand">
+                        {repurchaseData.repurchaseCount30d}
+                      </div>
+                      <div className="text-xs text-white/70 mt-1">次</div>
+                    </div>
+                  </div>
+                  <div
+                    className="relative rounded-xl p-4 shadow-sm bg-gradient-to-br overflow-hidden"
+                    style={{ background: 'linear-gradient(135deg, #F5C28C 0%, #E8A878 100%)' }}
+                  >
+                    <div className="relative">
+                      <div className="text-xs text-white/80 mb-1">平均客单价</div>
+                      <div className="text-2xl font-bold text-white font-quicksand">
+                        ¥{formatCurrency(repurchaseData.avgOrderValue30d)}
+                      </div>
+                      <div className="text-xs text-white/70 mt-1">元</div>
+                    </div>
+                  </div>
+                </div>
+
+                {repurchaseData.daily && repurchaseData.daily.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={360}>
+                    <ComposedChart
+                      data={repurchaseData.daily.map((d) => ({
+                        ...d,
+                        dateLabel: formatDateShort(d.date),
+                      }))}
+                      margin={{ top: 10, right: 40, left: 10, bottom: 0 }}
+                    >
+                      <defs>
+                        <linearGradient id="repurchaseMintGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#A2DBC1" />
+                          <stop offset="100%" stopColor="#8FCFAD" />
+                        </linearGradient>
+                        <linearGradient id="repurchaseCoffeeGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#DBB88E" />
+                          <stop offset="100%" stopColor="#C89F7B" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F3E7D9" vertical={false} />
+                      <XAxis
+                        dataKey="dateLabel"
+                        tick={{ fill: '#6B5B4F', fontSize: 11 }}
+                        axisLine={{ stroke: '#E7D0B3' }}
+                        tickLine={false}
+                        interval={Math.floor(repurchaseData.daily.length / 10)}
+                      />
+                      <YAxis
+                        yAxisId="left"
+                        tick={{ fill: '#6B5B4F', fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                        label={{ value: '人数', angle: -90, position: 'insideLeft', fill: '#6B5B4F', fontSize: 12 }}
+                      />
+                      <YAxis
+                        yAxisId="right"
+                        orientation="right"
+                        tick={{ fill: '#6B5B4F', fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(value) => `¥${value}`}
+                        label={{ value: '客单价', angle: 90, position: 'insideRight', fill: '#6B5B4F', fontSize: 12 }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: '#FFF8F0',
+                          border: 'none',
+                          borderRadius: 12,
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                        }}
+                        labelStyle={{ color: '#6B5B4F', fontWeight: 600 }}
+                        formatter={(value: number, name: string) => {
+                          const labelMap: Record<string, string> = {
+                            newCustomers: '新客数',
+                            returningCustomers: '老客数',
+                            repurchases: '复购次数',
+                            avgOrderValue: '平均客单价',
+                          };
+                          const unit = name === 'avgOrderValue' ? `¥${formatCurrency(value)}` : `${value}`;
+                          return [unit, labelMap[name] || name];
+                        }}
+                      />
+                      <Legend
+                        wrapperStyle={{ paddingTop: 16 }}
+                        iconType="circle"
+                      />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="newCustomers"
+                        name="新客"
+                        fill="url(#repurchaseMintGradient)"
+                        radius={[4, 4, 0, 0]}
+                        barSize={14}
+                      />
+                      <Bar
+                        yAxisId="left"
+                        dataKey="returningCustomers"
+                        name="老客"
+                        fill="url(#repurchaseCoffeeGradient)"
+                        radius={[4, 4, 0, 0]}
+                        barSize={14}
+                      />
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="repurchases"
+                        name="复购次数"
+                        stroke="#A896D4"
+                        strokeWidth={2.5}
+                        strokeDasharray="5 5"
+                        dot={{ fill: '#A896D4', strokeWidth: 2, r: 3, stroke: '#FFF8F0' }}
+                        activeDot={{ r: 6, fill: '#A896D4', stroke: '#FFF8F0', strokeWidth: 2 }}
+                      />
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="avgOrderValue"
+                        name="平均客单价"
+                        stroke="#E8A878"
+                        strokeWidth={2.5}
+                        dot={{ fill: '#E8A878', strokeWidth: 2, r: 3, stroke: '#FFF8F0' }}
+                        activeDot={{ r: 6, fill: '#E8A878', stroke: '#FFF8F0', strokeWidth: 2 }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-72 flex flex-col items-center justify-center text-warm-text/50">
+                    <div className="text-4xl mb-2">
+                      <span>📊</span>
+                    </div>
+                    <p>暂无每日数据</p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </>

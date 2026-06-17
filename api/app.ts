@@ -18,6 +18,7 @@ import groomingRouter from './routes/grooming.js'
 import careRouter from './routes/care.js'
 import checkoutRouter from './routes/checkout.js'
 import statisticsRouter from './routes/statistics.js'
+import customersRouter from './routes/customers.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -46,6 +47,7 @@ app.use('/api/grooming', groomingRouter)
 app.use('/api/care', careRouter)
 app.use('/api/checkout', checkoutRouter)
 app.use('/api/statistics', statisticsRouter)
+app.use('/api/customers', customersRouter)
 
 /**
  * health

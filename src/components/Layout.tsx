@@ -5,6 +5,7 @@ import {
   Scissors,
   Sun,
   Wallet,
+  Users,
   BarChart3,
 } from 'lucide-react';
 
@@ -14,6 +15,7 @@ const menuItems = [
   { path: '/grooming', label: '美容预约', icon: Scissors, emoji: '✂️' },
   { path: '/care', label: '日常照护', icon: Sun, emoji: '🌞' },
   { path: '/checkout', label: '结账管理', icon: Wallet, emoji: '💰' },
+  { path: '/customers', label: '客户档案', icon: Users, emoji: '👥' },
   { path: '/statistics', label: '数据统计', icon: BarChart3, emoji: '📊' },
 ];
 
@@ -25,6 +27,7 @@ const pageTitleMap: Record<string, string> = {
   '/grooming/new': '新增美容预约',
   '/care': '日常照护',
   '/checkout': '结账管理',
+  '/customers': '客户档案',
   '/statistics': '数据统计',
 };
 
@@ -32,6 +35,7 @@ function getPageTitle(pathname: string): string {
   if (pageTitleMap[pathname]) return pageTitleMap[pathname];
   if (pathname.startsWith('/boarding/')) return '寄养详情';
   if (pathname.startsWith('/checkout/')) return '结账详情';
+  if (pathname.startsWith('/customers/')) return '客户详情';
   return '萌宠管家';
 }
 

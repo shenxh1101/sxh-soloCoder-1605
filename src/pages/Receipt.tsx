@@ -55,6 +55,10 @@ function buildReceiptText(data: ReceiptData): string {
       lines.push(`  ${item.serviceName}  ￥${item.price}`);
     }
     lines.push(`美容小计：￥${data.groomingFee}`);
+  } else if (data.remarksFromPayment) {
+    lines.push('----------------------------------------');
+    lines.push('美容费用：');
+    lines.push(`  ${data.remarksFromPayment}`);
   }
   lines.push('----------------------------------------');
   lines.push(`小计：￥${data.boardingFee + data.groomingFee}`);
@@ -241,7 +245,7 @@ export default function Receipt() {
             </div>
           </div>
 
-          {data.groomingItems.length > 0 && (
+          {data.groomingItems.length > 0 ? (
             <>
               <div
                 className="border-t border-dashed my-5"
@@ -267,7 +271,18 @@ export default function Receipt() {
                 </div>
               </div>
             </>
-          )}
+          ) : data.remarksFromPayment ? (
+            <>
+              <div
+                className="border-t border-dashed my-5"
+                style={{ borderColor: '#E7D0B3' }}
+              />
+              <div className="text-sm text-warm-text/60 mb-2">美容费用</div>
+              <div className="text-sm text-warm-text/80 leading-relaxed">
+                {data.remarksFromPayment}
+              </div>
+            </>
+          ) : null}
 
           <div
             className="border-t border-dashed my-5"

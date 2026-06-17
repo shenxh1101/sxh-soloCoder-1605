@@ -251,4 +251,180 @@ router.get('/trend-30days', async (req: Request, res: Response): Promise<void> =
   res.json(success({ daily }));
 });
 
+interface ConsumeRecord {
+  ownerPhone: string;
+  ownerName: string;
+  date: string;
+  time: number;
+  totalAmount: number;
+}
+
+function getAllConsumeRecords(db: ReturnType<typeof getDb>): ConsumeRecord[] {
+  const records: ConsumeRecord[] = [];
+
+  const boardingByPhone = new Map<string, string>();
+  for (const b of db.data.boardingOrders) {
+    boardingByPhone.set(b.id, b.ownerPhone);
+  }
+  const boardingOwnerName = new Map<string, string>();
+  for (const b of db.data.boardingOrders) {
+    boardingOwnerName.set(b.id, b.ownerName);
+  }
+
+  for (const p of db.data.payments) {
+    const ownerPhone = boardingByPhone.get(p.boardingId) || `unknown_${p.boardingId}`;
+    const ownerName = boardingOwnerName.get(p.boardingId) || '散客';
+    records.push({
+      ownerPhone,
+      ownerName,
+      date: formatDate(new Date(p.paidAt)),
+      time: new Date(p.paidAt).getTime(),
+      totalAmount: p.totalAmount,
+    });
+  }
+
+  for (const b of db.data.boardingOrders) {
+    if (b.status !== 'completed') continue;
+    const dateStr = b.checkOutDate || b.checkInDate;
+    const hasPayment = db.data.payments.some((p) => p.boardingId === b.id);
+    if (!hasPayment) {
+      records.push({
+        ownerPhone: b.ownerPhone,
+        ownerName: b.ownerName,
+        date: dateStr,
+        time: new Date(dateStr).getTime(),
+        totalAmount: 0,
+      });
+    }
+  }
+
+  return records.sort((a, b) => a.time - b.time);
+}
+
+router.get('/repurchase-30days', async (req: Request, res: Response): Promise<void> => {
+  const db = getDb();
+  db.read();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayTime = today.getTime();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(today.getDate() - 29);
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+  const thirtyDaysAgoTime = thirtyDaysAgo.getTime();
+
+  const allRecords = getAllConsumeRecords(db);
+
+  const firstConsumeMap = new Map<string, number>();
+  for (const r of allRecords) {
+    if (!firstConsumeMap.has(r.ownerPhone)) {
+      firstConsumeMap.set(r.ownerPhone, r.time);
+    }
+  }
+
+  const last30DaysRecords = allRecords.filter(
+    (r) => r.time >= thirtyDaysAgoTime && r.time <= todayTime + 24 * 60 * 60 * 1000 - 1,
+  );
+
+  const customerOrderCountIn30d = new Map<string, number>();
+  for (const r of last30DaysRecords) {
+    customerOrderCountIn30d.set(
+      r.ownerPhone,
+      (customerOrderCountIn30d.get(r.ownerPhone) || 0) + 1,
+    );
+  }
+
+  let newCustomers30d = 0;
+  let returningCustomers30d = 0;
+  let repurchaseCount30d = 0;
+  let totalAmount30d = 0;
+  let orderCount30d = 0;
+
+  const processedCustomers = new Set<string>();
+
+  for (const r of last30DaysRecords) {
+    totalAmount30d += r.totalAmount;
+    orderCount30d += 1;
+
+    if (processedCustomers.has(r.ownerPhone)) continue;
+    processedCustomers.add(r.ownerPhone);
+
+    const firstConsumeTime = firstConsumeMap.get(r.ownerPhone);
+    if (firstConsumeTime !== undefined && firstConsumeTime >= thirtyDaysAgoTime) {
+      newCustomers30d += 1;
+    } else {
+      returningCustomers30d += 1;
+      const orderCount = customerOrderCountIn30d.get(r.ownerPhone) || 0;
+      if (orderCount >= 2) {
+        repurchaseCount30d += orderCount - 1;
+      }
+    }
+  }
+
+  const avgOrderValue30d = orderCount30d > 0 ? totalAmount30d / orderCount30d : 0;
+
+  const daily: Array<{
+    date: string;
+    newCustomers: number;
+    returningCustomers: number;
+    repurchases: number;
+    avgOrderValue: number;
+  }> = [];
+
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    const dateStr = formatDate(d);
+    const dayStart = d.getTime();
+    const dayEnd = dayStart + 24 * 60 * 60 * 1000 - 1;
+
+    const dayRecords = allRecords.filter((r) => r.time >= dayStart && r.time <= dayEnd);
+
+    const dayCustomerOrderCount = new Map<string, number>();
+    const dayProcessed = new Set<string>();
+    let newCustomers = 0;
+    let returningCustomers = 0;
+    let repurchases = 0;
+    let dayTotalAmount = 0;
+
+    for (const r of dayRecords) {
+      dayTotalAmount += r.totalAmount;
+      const prevCount = dayCustomerOrderCount.get(r.ownerPhone) || 0;
+      dayCustomerOrderCount.set(r.ownerPhone, prevCount + 1);
+
+      if (prevCount === 0) {
+        const firstConsumeTime = firstConsumeMap.get(r.ownerPhone);
+        if (firstConsumeTime !== undefined && firstConsumeTime >= dayStart && firstConsumeTime <= dayEnd) {
+          newCustomers += 1;
+        } else {
+          returningCustomers += 1;
+        }
+      } else {
+        repurchases += 1;
+      }
+    }
+
+    const dayOrderCount = dayRecords.length;
+    const avgOrderValue = dayOrderCount > 0 ? dayTotalAmount / dayOrderCount : 0;
+
+    daily.push({
+      date: dateStr,
+      newCustomers,
+      returningCustomers,
+      repurchases,
+      avgOrderValue,
+    });
+  }
+
+  res.json(
+    success({
+      newCustomers30d,
+      returningCustomers30d,
+      repurchaseCount30d,
+      avgOrderValue30d,
+      daily,
+    }),
+  );
+});
+
 export default router;

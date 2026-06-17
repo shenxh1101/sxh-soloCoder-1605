@@ -158,6 +158,7 @@ export interface ReceiptData {
   paymentMethod: 'cash' | 'wechat' | 'alipay' | 'card';
   paidAt: string;
   remarks?: string;
+  remarksFromPayment?: string;
 }
 
 export interface Trend30DaysItem {
@@ -170,4 +171,40 @@ export interface Trend30DaysItem {
 
 export interface Trend30DaysResponse {
   daily: Trend30DaysItem[];
+}
+
+export interface Customer {
+  ownerPhone: string;
+  ownerName: string;
+  tags: string[];
+  notes: string;
+  createdAt: string;
+}
+
+export interface CustomerProfile extends Customer {
+  petCount: number;
+  totalSpent: number;
+  lastVisit: string;
+}
+
+export interface CustomerDetail extends CustomerProfile {
+  pets: Array<{ petName: string; petBreed: string; petType: string }>;
+  boardingHistory: BoardingOrder[];
+  groomingHistory: GroomingAppointment[];
+}
+
+export interface CustomerRepurchaseDaily {
+  date: string;
+  newCustomers: number;
+  returningCustomers: number;
+  repurchases: number;
+  avgOrderValue: number;
+}
+
+export interface CustomerRepurchaseStats {
+  newCustomers30d: number;
+  returningCustomers30d: number;
+  repurchaseCount30d: number;
+  avgOrderValue30d: number;
+  daily: CustomerRepurchaseDaily[];
 }

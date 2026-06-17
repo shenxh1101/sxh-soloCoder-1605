@@ -161,7 +161,7 @@ router.get('/receipt/:boardingId', async (req: Request, res: Response): Promise<
   }
 
   const appointments = db.data.groomingAppointments.filter(
-    (a) => a.boardingId === boardingId && a.status === 'completed',
+    (a) => a.boardingId === boardingId && a.status !== 'cancelled',
   );
 
   const groomingItems: Array<{ serviceName: string; price: number }> = [];
@@ -172,6 +172,13 @@ router.get('/receipt/:boardingId', async (req: Request, res: Response): Promise<
         groomingItems.push({ serviceName: svc.name, price: svc.price });
       }
     }
+  }
+
+  if (groomingItems.length === 0 && payment.groomingFee > 0) {
+    groomingItems.push({
+      serviceName: `美容服务（备注）`,
+      price: payment.groomingFee,
+    });
   }
 
   const checkOutDate = boarding.checkOutDate || getToday();
@@ -197,6 +204,7 @@ router.get('/receipt/:boardingId', async (req: Request, res: Response): Promise<
       paymentMethod: payment.paymentMethod,
       paidAt: payment.paidAt,
       remarks: payment.remarks,
+      remarksFromPayment: payment.remarks,
     }),
   );
 });

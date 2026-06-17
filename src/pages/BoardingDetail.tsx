@@ -294,15 +294,21 @@ export default function BoardingDetail() {
             </div>
             <div className="flex justify-between items-center py-3 border-b border-cream-coffee-50">
               <span className="text-sm text-warm-text/60">主人</span>
-              <span className="text-sm font-medium text-warm-text">
+              <Link
+                to={`/customers/${encodeURIComponent(order.ownerPhone)}`}
+                className="text-sm font-medium text-mint-600 hover:underline"
+              >
                 {order.ownerName}
-              </span>
+              </Link>
             </div>
             <div className="flex justify-between items-center py-3 border-b border-cream-coffee-50">
               <span className="text-sm text-warm-text/60">联系电话</span>
-              <span className="text-sm font-medium text-warm-text">
+              <Link
+                to={`/customers/${encodeURIComponent(order.ownerPhone)}`}
+                className="text-sm font-medium text-mint-600 hover:underline"
+              >
                 {order.ownerPhone}
-              </span>
+              </Link>
             </div>
             <div className="flex justify-between items-center py-3">
               <span className="text-sm text-warm-text/60">每日价格</span>

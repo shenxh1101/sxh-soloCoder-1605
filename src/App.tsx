@@ -11,6 +11,8 @@ import CheckoutList from '@/pages/CheckoutList';
 import CheckoutDetail from '@/pages/CheckoutDetail';
 import Statistics from '@/pages/Statistics';
 import Receipt from '@/pages/Receipt';
+import CustomerList from '@/pages/CustomerList';
+import CustomerDetail from '@/pages/CustomerDetail';
 
 export default function App() {
   return (
@@ -26,6 +28,8 @@ export default function App() {
         <Route path="/checkout" element={<CheckoutList />} />
         <Route path="/checkout/:id" element={<CheckoutDetail />} />
         <Route path="/receipt/:boardingId" element={<Receipt />} />
+        <Route path="/customers" element={<CustomerList />} />
+        <Route path="/customers/:phone" element={<CustomerDetail />} />
         <Route path="/statistics" element={<Statistics />} />
       </Route>
     </Routes>

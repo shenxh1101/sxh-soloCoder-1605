@@ -20,6 +20,8 @@ import {
   getAvailableGroomers,
   getTimeSlots,
   createAppointment,
+  createAppointmentWithStatus,
+  getCustomerByPhone,
 } from '@/utils/api';
 import type {
   BoardingOrder,
@@ -59,6 +61,7 @@ export default function GroomingNew() {
   const [timeSlots, setTimeSlots] = useState<GroomingTimeSlotsResponse | null>(null);
   const [loadingTimeSlots, setLoadingTimeSlots] = useState(false);
   const [expandedGroomers, setExpandedGroomers] = useState<Set<string>>(new Set());
+  const [customerTags, setCustomerTags] = useState<string[]>([]);
 
   const [selectedBoardingId, setSelectedBoardingId] = useState<string>(
     boardingIdFromUrl || '',
@@ -92,6 +95,16 @@ export default function GroomingNew() {
             setPetName(order.petName);
             setPetBreed(order.petBreed);
             setIsWalkIn(false);
+            if (order.ownerPhone) {
+              try {
+                const customer = await getCustomerByPhone(order.ownerPhone);
+                if (customer && customer.tags.length > 0) {
+                  setCustomerTags(customer.tags);
+                }
+              } catch {
+                // ignore
+              }
+            }
           }
         } catch {
           // ignore
@@ -164,6 +177,7 @@ export default function GroomingNew() {
       setIsWalkIn(true);
       setPetName('');
       setPetBreed('');
+      setCustomerTags([]);
     } else {
       setSelectedBoardingId(value);
       setIsWalkIn(false);
@@ -171,6 +185,23 @@ export default function GroomingNew() {
       if (order) {
         setPetName(order.petName);
         setPetBreed(order.petBreed);
+        if (order.ownerPhone) {
+          let cancelled = false;
+          (async () => {
+            try {
+              const customer = await getCustomerByPhone(order.ownerPhone);
+              if (!cancelled && customer && customer.tags.length > 0) {
+                setCustomerTags(customer.tags);
+              } else if (!cancelled) {
+                setCustomerTags([]);
+              }
+            } catch {
+              if (!cancelled) setCustomerTags([]);
+            }
+          })();
+        } else {
+          setCustomerTags([]);
+        }
       }
     }
   };
@@ -216,7 +247,7 @@ export default function GroomingNew() {
     }
     setSubmitting(true);
     try {
-      await createAppointment({
+      const result = await createAppointmentWithStatus({
         boardingId: isWalkIn ? undefined : selectedBoardingId,
         petName: petName.trim(),
         petBreed: petBreed.trim(),
@@ -229,7 +260,19 @@ export default function GroomingNew() {
         totalPrice,
         notes: notes.trim() || undefined,
       });
+      if (result.status === 409 || (result.error && (result.error.includes('冲突') || result.error.includes('已有预约')))) {
+        alert('该美容师已被其他订单占用，请更换时间或美容师');
+        return;
+      }
       navigate('/grooming');
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('冲突') || errMsg.includes('已有预约')) {
+        alert('该美容师已被其他订单占用，请更换时间或美容师');
+        return;
+      }
+      console.error('Failed to create appointment', err);
+      alert('创建失败，请重试');
     } finally {
       setSubmitting(false);
     }
@@ -257,6 +300,27 @@ export default function GroomingNew() {
         className="flex-1 overflow-auto pr-2"
       >
         <div className="max-w-4xl mx-auto space-y-6">
+          {customerTags.length > 0 && (
+            <div className="rounded-xl border-2 border-orange-200 bg-orange-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <div className="font-semibold text-orange-700 mb-2">客户标签提醒</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {customerTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-600"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl shadow-sm p-6">
             <h3 className="font-bold text-warm-text mb-4 flex items-center gap-2">
               <PawPrint className="w-5 h-5 text-mint-500" />
