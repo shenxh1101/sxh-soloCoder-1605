@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Loader2,
   User,
+  Calendar,
 } from 'lucide-react';
 import {
   getBoarding,
@@ -23,6 +24,8 @@ import {
   getGroomingServices,
   createCareRecord,
   updateAppointment,
+  getUpcomingFollowUps,
+  updateFollowUp,
 } from '../utils/api';
 import type {
   BoardingOrder,
@@ -30,6 +33,7 @@ import type {
   Statistics,
   Groomer,
   GroomingService,
+  FollowUpRecord,
 } from '../../shared/types';
 import { cn } from '../lib/utils';
 
@@ -163,9 +167,11 @@ export default function Dashboard() {
   const [appointments, setAppointments] = useState<GroomingAppointment[]>([]);
   const [groomers, setGroomers] = useState<Groomer[]>([]);
   const [services, setServices] = useState<GroomingService[]>([]);
+  const [followUps, setFollowUps] = useState<FollowUpRecord[]>([]);
 
   const [submittingCare, setSubmittingCare] = useState<string | null>(null);
   const [updatingAppointment, setUpdatingAppointment] = useState<string | null>(null);
+  const [updatingFollowUp, setUpdatingFollowUp] = useState<string | null>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -181,6 +187,7 @@ export default function Dashboard() {
           statsRes,
           groomersRes,
           servicesRes,
+          followUpsRes,
         ] = await Promise.all([
           getBoarding('active'),
           getAppointments(today),
@@ -188,6 +195,7 @@ export default function Dashboard() {
           getStatistics(month),
           getGroomers(),
           getGroomingServices(),
+          getUpcomingFollowUps(),
         ]);
 
         setBoardingCount(boardingRes.length);
@@ -199,6 +207,7 @@ export default function Dashboard() {
         setAppointments(appointmentsRes);
         setGroomers(groomersRes);
         setServices(servicesRes);
+        setFollowUps(followUpsRes);
       } catch (err) {
         console.error('Dashboard fetch error:', err);
       } finally {
@@ -252,6 +261,21 @@ export default function Dashboard() {
       console.error('Update appointment error:', err);
     } finally {
       setUpdatingAppointment(null);
+    }
+  }
+
+  async function handleFollowUpDone(id: string) {
+    if (updatingFollowUp === id) return;
+    setUpdatingFollowUp(id);
+    try {
+      await updateFollowUp(id, { status: 'done' });
+      setFollowUps((prev) =>
+        prev.map((f) => (f.id === id ? { ...f, status: 'done' as const, handledAt: new Date().toISOString() } : f))
+      );
+    } catch (err) {
+      console.error('Update follow-up error:', err);
+    } finally {
+      setUpdatingFollowUp(null);
     }
   }
 
@@ -378,10 +402,99 @@ export default function Dashboard() {
         })}
       </div>
 
+      {/* 近期回访卡片 */}
+      <div className="space-y-4 opacity-0 animate-fadeInUp" style={{ animationDelay: '400ms' }}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold text-warm-text font-quicksand flex items-center gap-2">
+            <span>📋</span> 近期回访
+          </h3>
+          <Link
+            to="/customers?filter=pendingFollowUps"
+            className="text-sm text-cream-coffee-500 hover:text-cream-coffee-600 font-medium transition-colors"
+          >
+            查看全部 →
+          </Link>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 shadow-sm">
+          {loading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <TimelineSkeleton key={i} />
+              ))}
+            </div>
+          ) : followUps.length === 0 ? (
+            <div className="py-12 text-center">
+              <div className="text-5xl mb-3">📋</div>
+              <p className="text-warm-text/50">近期暂无回访任务</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {followUps.map((fu) => {
+                const isDone = fu.status === 'done';
+                return (
+                  <div
+                    key={fu.id}
+                    className={cn(
+                      'rounded-xl border p-4 transition-all',
+                      isDone
+                        ? 'bg-gray-50 border-gray-100 opacity-60'
+                        : 'bg-white border-cream-coffee-100 hover:border-cream-coffee-200 hover:shadow-sm'
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div>
+                        <div className={cn('font-semibold text-sm', isDone ? 'text-warm-text/50' : 'text-warm-text')}>
+                          {fu.ownerName || fu.ownerPhone}
+                        </div>
+                        <div className="text-xs text-warm-text/50 mt-0.5">{fu.ownerPhone}</div>
+                      </div>
+                      <span
+                        className={cn(
+                          'flex-shrink-0 px-2.5 py-0.5 rounded-full text-xs font-medium',
+                          fu.status === 'pending'
+                            ? 'bg-orange-100 text-orange-600'
+                            : fu.status === 'done'
+                            ? 'bg-gray-100 text-gray-500'
+                            : 'bg-red-100 text-red-600'
+                        )}
+                      >
+                        {fu.status === 'pending' ? '待处理' : fu.status === 'done' ? '已处理' : '已取消'}
+                      </span>
+                    </div>
+                    <div className="text-xs text-warm-text/60 mb-1 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {fu.followDate}
+                    </div>
+                    <div className={cn('text-sm mb-3 line-clamp-2', isDone ? 'text-warm-text/50' : 'text-warm-text/80')}>
+                      {fu.reason}
+                    </div>
+                    {!isDone ? (
+                      <button
+                        onClick={() => handleFollowUpDone(fu.id)}
+                        disabled={updatingFollowUp === fu.id}
+                        className="w-full px-3 py-1.5 rounded-lg bg-cream-coffee-500 hover:bg-cream-coffee-600 text-white text-xs font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        {updatingFollowUp === fu.id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : null}
+                        处理
+                      </button>
+                    ) : (
+                      <div className="text-xs text-warm-text/40 text-center py-1.5">已处理</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* 下方两栏布局 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* 左栏：今日在店寄养 */}
-        <div className="lg:col-span-2 space-y-4 opacity-0 animate-fadeInUp" style={{ animationDelay: '400ms' }}>
+        <div className="lg:col-span-2 space-y-4 opacity-0 animate-fadeInUp" style={{ animationDelay: '480ms' }}>
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-warm-text font-quicksand flex items-center gap-2">
               <span>🐶</span> 今日在店寄养
@@ -486,7 +599,7 @@ export default function Dashboard() {
         </div>
 
         {/* 右栏：今日美容预约 */}
-        <div className="space-y-4 opacity-0 animate-fadeInUp" style={{ animationDelay: '480ms' }}>
+        <div className="space-y-4 opacity-0 animate-fadeInUp" style={{ animationDelay: '560ms' }}>
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-warm-text font-quicksand flex items-center gap-2">
               <span>✂️</span> 今日美容预约

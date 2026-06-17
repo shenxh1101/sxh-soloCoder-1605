@@ -309,6 +309,32 @@ export const mockData: Database = {
       remarks: '散客：泰迪 精致洗护+美容造型',
     },
   ],
+  followUps: [
+    {
+      id: 'f1',
+      ownerPhone: '13600136000',
+      followDate: '2026-06-20',
+      reason: '回访寄养后宠物状态',
+      status: 'pending',
+      createdAt: '2026-06-18T09:00:00.000Z',
+    },
+    {
+      id: 'f2',
+      ownerPhone: '13800138000',
+      followDate: '2026-06-25',
+      reason: '询问下月寄养计划',
+      status: 'pending',
+      createdAt: '2026-06-18T10:00:00.000Z',
+    },
+    {
+      id: 'f3',
+      ownerPhone: '13900139000',
+      followDate: '2026-06-19',
+      reason: '洗护后皮肤状态跟踪',
+      status: 'pending',
+      createdAt: '2026-06-18T11:00:00.000Z',
+    },
+  ],
 };
 
 export default mockData;

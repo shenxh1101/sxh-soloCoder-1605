@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { getDb } from '../db/index.js';
 import { success, error } from '../utils/response.js';
 import type { BoardingOrder } from '../types/index.js';
+import { ensureCustomer } from '../utils/customer.js';
 
 const router = Router();
 
@@ -65,6 +66,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
   };
 
   db.data.boardingOrders.push(newOrder);
+  ensureCustomer(db, newOrder.ownerPhone, newOrder.ownerName);
   db.write();
 
   res.json(success(newOrder));

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Search, Phone, PawPrint, Calendar, Wallet } from 'lucide-react';
-import { getCustomers } from '@/utils/api';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Search, Phone, PawPrint, Calendar, Wallet, Users, Clock, RefreshCw } from 'lucide-react';
+import { getCustomers, getCustomerSegments } from '@/utils/api';
 import type { CustomerProfile } from '../../shared/types';
+import { cn } from '@/lib/utils';
 
 const tagColorMap: Record<string, { bg: string; text: string }> = {
   '常客': { bg: 'bg-mint-100', text: 'text-mint-700' },
@@ -19,15 +20,43 @@ function formatCurrency(value: number): string {
   return value.toLocaleString('zh-CN');
 }
 
+type FilterTab = 'all' | 'inactive60d' | 'repurchase30d';
+
+const tabConfig: { key: FilterTab; label: string; icon: typeof Users }[] = [
+  { key: 'all', label: '全部客户', icon: Users },
+  { key: 'inactive60d', label: '近60天未到店', icon: Clock },
+  { key: 'repurchase30d', label: '近30天复购客', icon: RefreshCw },
+];
+
 export default function CustomerList() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
+  const [segments, setSegments] = useState<{ inactive60d: CustomerProfile[]; repurchase30d: CustomerProfile[] }>({
+    inactive60d: [],
+    repurchase30d: [],
+  });
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
   const [loading, setLoading] = useState(true);
+  const [loadingSegments, setLoadingSegments] = useState(false);
+
+  useEffect(() => {
+    const filter = searchParams.get('filter');
+    if (filter === 'pendingFollowUps') {
+      setActiveTab('all');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     loadCustomers();
   }, [search]);
+
+  useEffect(() => {
+    if (activeTab !== 'all') {
+      loadSegments();
+    }
+  }, [activeTab]);
 
   async function loadCustomers() {
     setLoading(true);
@@ -40,6 +69,34 @@ export default function CustomerList() {
       setLoading(false);
     }
   }
+
+  async function loadSegments() {
+    setLoadingSegments(true);
+    try {
+      const data = await getCustomerSegments();
+      setSegments({
+        inactive60d: (data.inactive60d || []) as CustomerProfile[],
+        repurchase30d: (data.repurchase30d || []) as CustomerProfile[],
+      });
+    } catch (e) {
+      console.error('Failed to load customer segments', e);
+    } finally {
+      setLoadingSegments(false);
+    }
+  }
+
+  function handleTabChange(tab: FilterTab) {
+    setActiveTab(tab);
+  }
+
+  const displayCustomers =
+    activeTab === 'all'
+      ? customers
+      : activeTab === 'inactive60d'
+      ? segments.inactive60d
+      : segments.repurchase30d;
+
+  const isLoading = activeTab === 'all' ? loading : loadingSegments;
 
   return (
     <div className="flex flex-col gap-6">
@@ -59,18 +116,46 @@ export default function CustomerList() {
         </div>
       </div>
 
-      {loading ? (
+      <div className="flex flex-wrap gap-2">
+        {tabConfig.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => handleTabChange(tab.key)}
+              className={cn(
+                'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
+                isActive
+                  ? 'bg-cream-coffee-500 text-white shadow-sm'
+                  : 'bg-white text-warm-text/70 border border-cream-coffee-100 hover:border-cream-coffee-200 hover:text-warm-text'
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {isLoading ? (
         <div className="flex items-center justify-center py-20">
           <div className="text-warm-text/60">加载中...</div>
         </div>
-      ) : customers.length === 0 ? (
+      ) : displayCustomers.length === 0 ? (
         <div className="rounded-2xl shadow-sm bg-white py-20 text-center" style={{ borderRadius: 16 }}>
           <div className="text-5xl mb-3">👥</div>
-          <p className="text-warm-text/50">暂无客户档案</p>
+          <p className="text-warm-text/50">
+            {activeTab === 'all'
+              ? '暂无客户档案'
+              : activeTab === 'inactive60d'
+              ? '暂无近60天未到店客户'
+              : '暂无近30天复购客户'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {customers.map((customer) => (
+          {displayCustomers.map((customer) => (
             <div
               key={customer.ownerPhone}
               onClick={() => navigate(`/customers/${encodeURIComponent(customer.ownerPhone)}`)}
@@ -117,7 +202,7 @@ export default function CustomerList() {
                 </div>
               </div>
 
-              {customer.tags.length > 0 && (
+              {customer.tags && customer.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {customer.tags.map((tag) => {
                     const style = getTagStyle(tag);

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { getDb } from '../db/index.js';
 import { success, error } from '../utils/response.js';
 import type { GroomingAppointment } from '../types/index.js';
+import { ensureCustomer } from '../utils/customer.js';
 
 const router = Router();
 
@@ -104,9 +105,24 @@ router.post('/appointments', async (req: Request, res: Response): Promise<void> 
   }
 
   const id = 'a' + Date.now();
+  const boardingId = req.body.boardingId;
+
+  let aptOwnerPhone: string | undefined = req.body.ownerPhone;
+  let aptOwnerName: string | undefined = req.body.ownerName;
+
+  if (boardingId) {
+    const boardingOrder = db.data.boardingOrders.find((b) => b.id === boardingId);
+    if (boardingOrder) {
+      aptOwnerPhone = boardingOrder.ownerPhone;
+      aptOwnerName = boardingOrder.ownerName;
+    }
+  }
+
   const newApt: GroomingAppointment = {
     id,
-    boardingId: req.body.boardingId,
+    boardingId,
+    ownerPhone: aptOwnerPhone,
+    ownerName: aptOwnerName,
     petName: req.body.petName,
     petBreed: req.body.petBreed,
     serviceIds,
@@ -120,6 +136,11 @@ router.post('/appointments', async (req: Request, res: Response): Promise<void> 
   };
 
   db.data.groomingAppointments.push(newApt);
+
+  if (aptOwnerPhone && aptOwnerName) {
+    ensureCustomer(db, aptOwnerPhone, aptOwnerName);
+  }
+
   db.write();
 
   res.json(success(newApt));

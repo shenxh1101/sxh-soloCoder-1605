@@ -11,6 +11,9 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  Phone,
+  Users,
+  Search,
 } from 'lucide-react';
 import {
   getBoarding,
@@ -19,16 +22,21 @@ import {
   getGroomers,
   getAvailableGroomers,
   getTimeSlots,
-  createAppointment,
   createAppointmentWithStatus,
   getCustomerByPhone,
+  getCustomers,
 } from '@/utils/api';
 import type {
   BoardingOrder,
   GroomingService,
   Groomer,
   GroomingTimeSlotsResponse,
+  CustomerProfile,
+  CustomerDetail,
 } from '../../shared/types';
+import { cn } from '@/lib/utils';
+
+type WalkInMode = 'pure' | 'existing' | 'phone';
 
 function todayStr(): string {
   const d = new Date();
@@ -63,10 +71,17 @@ export default function GroomingNew() {
   const [expandedGroomers, setExpandedGroomers] = useState<Set<string>>(new Set());
   const [customerTags, setCustomerTags] = useState<string[]>([]);
 
-  const [selectedBoardingId, setSelectedBoardingId] = useState<string>(
-    boardingIdFromUrl || '',
-  );
+  const [allCustomers, setAllCustomers] = useState<CustomerProfile[]>([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [customerDetail, setCustomerDetail] = useState<CustomerDetail | null>(null);
+  const [loadingCustomerByPhone, setLoadingCustomerByPhone] = useState(false);
+
+  const [selectedBoardingId, setSelectedBoardingId] = useState<string>(boardingIdFromUrl || '');
   const [isWalkIn, setIsWalkIn] = useState(!boardingIdFromUrl);
+  const [walkInMode, setWalkInMode] = useState<WalkInMode>('pure');
+  const [selectedCustomerPhone, setSelectedCustomerPhone] = useState('');
+  const [manualOwnerPhone, setManualOwnerPhone] = useState('');
+
   const [petName, setPetName] = useState('');
   const [petBreed, setPetBreed] = useState('');
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
@@ -113,21 +128,71 @@ export default function GroomingNew() {
     })();
   }, [boardingIdFromUrl]);
 
+  useEffect(() => {
+    if (!isWalkIn || walkInMode !== 'existing') return;
+    (async () => {
+      setLoadingCustomers(true);
+      try {
+        const list = await getCustomers();
+        setAllCustomers(list);
+      } catch {
+        // ignore
+      } finally {
+        setLoadingCustomers(false);
+      }
+    })();
+  }, [isWalkIn, walkInMode]);
+
   const totalDuration = useMemo(
-    () =>
-      services
-        .filter((s) => selectedServiceIds.includes(s.id))
-        .reduce((sum, s) => sum + s.duration, 0),
-    [selectedServiceIds, services],
+    () => services.filter((s) => selectedServiceIds.includes(s.id)).reduce((sum, s) => sum + s.duration, 0),
+    [selectedServiceIds, services]
   );
 
   const totalPrice = useMemo(
-    () =>
-      services
-        .filter((s) => selectedServiceIds.includes(s.id))
-        .reduce((sum, s) => sum + s.price, 0),
-    [selectedServiceIds, services],
+    () => services.filter((s) => selectedServiceIds.includes(s.id)).reduce((sum, s) => sum + s.price, 0),
+    [selectedServiceIds, services]
   );
+
+  const currentOwnerPhone = useMemo(() => {
+    if (!isWalkIn) {
+      const order = boardingOrders.find((b) => b.id === selectedBoardingId);
+      return order?.ownerPhone || '';
+    }
+    if (walkInMode === 'existing') {
+      return selectedCustomerPhone;
+    }
+    if (walkInMode === 'phone') {
+      return manualOwnerPhone;
+    }
+    return '';
+  }, [isWalkIn, walkInMode, selectedBoardingId, boardingOrders, selectedCustomerPhone, manualOwnerPhone]);
+
+  const currentOwnerName = useMemo(() => {
+    if (!isWalkIn) {
+      const order = boardingOrders.find((b) => b.id === selectedBoardingId);
+      return order?.ownerName || '';
+    }
+    if (walkInMode === 'existing') {
+      const c = allCustomers.find((c) => c.ownerPhone === selectedCustomerPhone);
+      return c?.ownerName || '';
+    }
+    if (walkInMode === 'phone' && customerDetail) {
+      return customerDetail.ownerName;
+    }
+    return '';
+  }, [isWalkIn, walkInMode, selectedBoardingId, boardingOrders, selectedCustomerPhone, allCustomers, customerDetail]);
+
+  const customerPetOptions = useMemo(() => {
+    if (!isWalkIn) return [];
+    if (walkInMode === 'existing') {
+      const c = allCustomers.find((c) => c.ownerPhone === selectedCustomerPhone);
+      return c ? [] : [];
+    }
+    if (walkInMode === 'phone' && customerDetail) {
+      return customerDetail.pets || [];
+    }
+    return [];
+  }, [isWalkIn, walkInMode, selectedCustomerPhone, allCustomers, customerDetail]);
 
   useEffect(() => {
     if (!appointmentDate || !startTime || totalDuration <= 0) {
@@ -165,16 +230,66 @@ export default function GroomingNew() {
     };
   }, [appointmentDate, startTime, totalDuration]);
 
+  useEffect(() => {
+    if (!currentOwnerPhone) {
+      setCustomerTags([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const customer = await getCustomerByPhone(currentOwnerPhone);
+        if (!cancelled && customer && customer.tags.length > 0) {
+          setCustomerTags(customer.tags);
+        } else if (!cancelled) {
+          setCustomerTags([]);
+        }
+      } catch {
+        if (!cancelled) setCustomerTags([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentOwnerPhone]);
+
+  async function handlePhoneBlur() {
+    const phone = manualOwnerPhone.trim();
+    if (!phone) {
+      setCustomerDetail(null);
+      return;
+    }
+    setLoadingCustomerByPhone(true);
+    try {
+      const customer = await getCustomerByPhone(phone);
+      if (customer) {
+        setCustomerDetail(customer);
+        if (!petName && customer.pets && customer.pets.length > 0) {
+          setPetName(customer.pets[0].petName);
+          setPetBreed(customer.pets[0].petBreed);
+        }
+      } else {
+        setCustomerDetail(null);
+      }
+    } catch {
+      setCustomerDetail(null);
+    } finally {
+      setLoadingCustomerByPhone(false);
+    }
+  }
+
   const toggleService = (id: string) => {
-    setSelectedServiceIds((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
-    );
+    setSelectedServiceIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
   };
 
   const handleBoardingChange = (value: string) => {
     if (value === 'walkin') {
       setSelectedBoardingId('');
       setIsWalkIn(true);
+      setWalkInMode('pure');
+      setSelectedCustomerPhone('');
+      setManualOwnerPhone('');
+      setCustomerDetail(null);
       setPetName('');
       setPetBreed('');
       setCustomerTags([]);
@@ -185,31 +300,36 @@ export default function GroomingNew() {
       if (order) {
         setPetName(order.petName);
         setPetBreed(order.petBreed);
-        if (order.ownerPhone) {
-          let cancelled = false;
-          (async () => {
-            try {
-              const customer = await getCustomerByPhone(order.ownerPhone);
-              if (!cancelled && customer && customer.tags.length > 0) {
-                setCustomerTags(customer.tags);
-              } else if (!cancelled) {
-                setCustomerTags([]);
-              }
-            } catch {
-              if (!cancelled) setCustomerTags([]);
-            }
-          })();
-        } else {
-          setCustomerTags([]);
-        }
       }
     }
   };
 
-  const availableGroomerIds = useMemo(
-    () => new Set(availableGroomers.map((g) => g.id)),
-    [availableGroomers],
-  );
+  const handleWalkInModeChange = (mode: WalkInMode) => {
+    setWalkInMode(mode);
+    setSelectedCustomerPhone('');
+    setManualOwnerPhone('');
+    setCustomerDetail(null);
+    setCustomerTags([]);
+    if (mode === 'pure') {
+      setPetName('');
+      setPetBreed('');
+    }
+  };
+
+  const handleSelectExistingCustomer = (phone: string) => {
+    setSelectedCustomerPhone(phone);
+    const c = allCustomers.find((c) => c.ownerPhone === phone);
+    if (c && !petName) {
+      // 预填名字但不预填品种，因为客户可能有多只宠物
+    }
+  };
+
+  const handleSelectPet = (petInfo: { petName: string; petBreed: string }) => {
+    setPetName(petInfo.petName);
+    setPetBreed(petInfo.petBreed);
+  };
+
+  const availableGroomerIds = useMemo(() => new Set(availableGroomers.map((g) => g.id)), [availableGroomers]);
 
   const toggleGroomerExpand = (groomerId: string) => {
     setExpandedGroomers((prev) => {
@@ -247,7 +367,7 @@ export default function GroomingNew() {
     }
     setSubmitting(true);
     try {
-      const result = await createAppointmentWithStatus({
+      const baseData = {
         boardingId: isWalkIn ? undefined : selectedBoardingId,
         petName: petName.trim(),
         petBreed: petBreed.trim(),
@@ -256,11 +376,27 @@ export default function GroomingNew() {
         appointmentDate,
         startTime,
         endTime: addMinutes(startTime, totalDuration),
-        status: 'pending',
+        status: 'pending' as const,
         totalPrice,
         notes: notes.trim() || undefined,
-      });
-      if (result.status === 409 || (result.error && (result.error.includes('冲突') || result.error.includes('已有预约')))) {
+      };
+
+      let submitData: any = baseData;
+      if (isWalkIn && (walkInMode === 'existing' || walkInMode === 'phone')) {
+        if (currentOwnerPhone && currentOwnerName) {
+          submitData = {
+            ...baseData,
+            ownerPhone: currentOwnerPhone,
+            ownerName: currentOwnerName,
+          };
+        }
+      }
+
+      const result = await createAppointmentWithStatus(submitData);
+      if (
+        result.status === 409 ||
+        (result.error && (result.error.includes('冲突') || result.error.includes('已有预约')))
+      ) {
         alert('该美容师已被其他订单占用，请更换时间或美容师');
         return;
       }
@@ -295,10 +431,7 @@ export default function GroomingNew() {
         </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex-1 overflow-auto pr-2"
-      >
+      <form onSubmit={handleSubmit} className="flex-1 overflow-auto pr-2">
         <div className="max-w-4xl mx-auto space-y-6">
           {customerTags.length > 0 && (
             <div className="rounded-xl border-2 border-orange-200 bg-orange-50 p-4">
@@ -328,9 +461,7 @@ export default function GroomingNew() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-warm-text mb-1.5">
-                  关联寄养订单
-                </label>
+                <label className="block text-sm font-medium text-warm-text mb-1.5">关联寄养订单</label>
                 <select
                   value={isWalkIn ? 'walkin' : selectedBoardingId}
                   onChange={(e) => handleBoardingChange(e.target.value)}
@@ -346,6 +477,122 @@ export default function GroomingNew() {
               </div>
 
               {isWalkIn && (
+                <div className="col-span-2">
+                  <div className="space-y-2 mb-4">
+                    <label className="block text-sm font-medium text-warm-text">客户识别</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        { key: 'pure' as WalkInMode, label: '纯散客', icon: PawPrint },
+                        { key: 'existing' as WalkInMode, label: '选择已有客户', icon: Users },
+                        { key: 'phone' as WalkInMode, label: '输入主人电话', icon: Phone },
+                      ].map((opt) => {
+                        const Icon = opt.icon;
+                        const active = walkInMode === opt.key;
+                        return (
+                          <button
+                            key={opt.key}
+                            type="button"
+                            onClick={() => handleWalkInModeChange(opt.key)}
+                            className={cn(
+                              'inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all',
+                              active
+                                ? 'bg-mint-500 text-white shadow-sm'
+                                : 'bg-cream-coffee-50 text-warm-text/70 border border-cream-coffee-100 hover:border-cream-coffee-200'
+                            )}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {walkInMode === 'existing' && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-warm-text mb-1.5">
+                        选择客户 <span className="text-red-500">*</span>
+                      </label>
+                      {loadingCustomers ? (
+                        <div className="px-4 py-2.5 text-sm text-warm-text/50">加载客户列表中...</div>
+                      ) : (
+                        <select
+                          value={selectedCustomerPhone}
+                          onChange={(e) => handleSelectExistingCustomer(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-cream-coffee-200 rounded-xl bg-white text-warm-text focus:outline-none focus:ring-2 focus:ring-mint-400 focus:border-transparent"
+                        >
+                          <option value="">请选择客户</option>
+                          {allCustomers.map((c) => (
+                            <option key={c.ownerPhone} value={c.ownerPhone}>
+                              {c.ownerName} · {c.ownerPhone}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  {walkInMode === 'phone' && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-warm-text mb-1.5">
+                        主人电话 <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-warm-text/40" />
+                        <input
+                          type="tel"
+                          value={manualOwnerPhone}
+                          onChange={(e) => setManualOwnerPhone(e.target.value)}
+                          onBlur={handlePhoneBlur}
+                          placeholder="输入主人电话，自动匹配客户"
+                          className="w-full pl-11 pr-4 py-2.5 border border-cream-coffee-200 rounded-xl bg-white text-sm text-warm-text placeholder-warm-text/40 focus:outline-none focus:ring-2 focus:ring-mint-400 focus:border-transparent"
+                        />
+                        {loadingCustomerByPhone && (
+                          <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-text/40 animate-spin" />
+                        )}
+                      </div>
+                      {customerDetail && (
+                        <div className="mt-2 p-3 rounded-xl bg-mint-50 border border-mint-100 text-sm">
+                          <div className="font-medium text-mint-700">
+                            已匹配：{customerDetail.ownerName}
+                          </div>
+                          {customerDetail.pets && customerDetail.pets.length > 0 && (
+                            <div className="text-xs text-warm-text/60 mt-1">
+                              名下宠物：{customerDetail.pets.map((p) => p.petName).join('、')}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {((walkInMode === 'phone' && customerPetOptions.length > 0) ||
+                    (walkInMode === 'existing' && customerPetOptions.length > 0)) && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-warm-text mb-1.5">选择宠物</label>
+                      <select
+                        value={petName}
+                        onChange={(e) => {
+                          const pet = customerPetOptions.find((p) => p.petName === e.target.value);
+                          if (pet) {
+                            handleSelectPet({ petName: pet.petName, petBreed: pet.petBreed });
+                          }
+                        }}
+                        className="w-full px-4 py-2.5 border border-cream-coffee-200 rounded-xl bg-white text-warm-text focus:outline-none focus:ring-2 focus:ring-mint-400 focus:border-transparent"
+                      >
+                        <option value="">-- 选择宠物 --</option>
+                        {customerPetOptions.map((p) => (
+                          <option key={p.petName} value={p.petName}>
+                            {p.petName}（{p.petBreed}）
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(isWalkIn || (!isWalkIn && !petName)) && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-warm-text mb-1.5">
@@ -378,12 +625,8 @@ export default function GroomingNew() {
                 <div className="col-span-2 p-3 bg-cream-coffee-50 rounded-xl">
                   <div className="text-sm text-warm-text/70">
                     已选宠物：
-                    <span className="font-semibold text-warm-text ml-1">
-                      {petName}
-                    </span>
-                    <span className="text-warm-text/50 ml-2">
-                      ({petBreed})
-                    </span>
+                    <span className="font-semibold text-warm-text ml-1">{petName}</span>
+                    <span className="text-warm-text/50 ml-2">({petBreed})</span>
                   </div>
                 </div>
               )}
@@ -401,11 +644,12 @@ export default function GroomingNew() {
                 return (
                   <label
                     key={svc.id}
-                    className={`flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    className={cn(
+                      'flex items-start gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all',
                       checked
                         ? 'border-mint-400 bg-mint-50'
                         : 'border-cream-coffee-100 bg-cream-coffee-50/50 hover:border-cream-coffee-200'
-                    }`}
+                    )}
                   >
                     <input
                       type="checkbox"
@@ -415,12 +659,8 @@ export default function GroomingNew() {
                     />
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-warm-text">
-                          {svc.name}
-                        </span>
-                        <span className="text-mint-600 font-bold">
-                          ¥{svc.price}
-                        </span>
+                        <span className="font-semibold text-warm-text">{svc.name}</span>
+                        <span className="text-mint-600 font-bold">¥{svc.price}</span>
                       </div>
                       <div className="flex items-center gap-1 text-xs text-warm-text/60 mt-1">
                         <Clock className="w-3 h-3" />
@@ -437,24 +677,18 @@ export default function GroomingNew() {
                   <div className="flex items-center gap-2 text-warm-text/70">
                     <Clock className="w-4 h-4 text-mint-500" />
                     预计总时长：
-                    <span className="font-bold text-warm-text">
-                      {totalDuration} 分钟
-                    </span>
+                    <span className="font-bold text-warm-text">{totalDuration} 分钟</span>
                   </div>
                   <div className="flex items-center gap-2 text-warm-text/70">
                     <CheckCircle className="w-4 h-4 text-mint-500" />
                     已选
-                    <span className="font-bold text-warm-text">
-                      {selectedServiceIds.length}
-                    </span>
+                    <span className="font-bold text-warm-text">{selectedServiceIds.length}</span>
                     项服务
                   </div>
                 </div>
                 <div className="text-warm-text/70">
                   总价格：
-                  <span className="text-mint-600 font-bold text-xl ml-1">
-                    ¥{totalPrice}
-                  </span>
+                  <span className="text-mint-600 font-bold text-xl ml-1">¥{totalPrice}</span>
                 </div>
               </div>
             )}
@@ -509,25 +743,19 @@ export default function GroomingNew() {
             {loadingAvailable || loadingTimeSlots ? (
               <div className="text-warm-text/60 py-2">查询空闲美容师中...</div>
             ) : totalDuration <= 0 ? (
-              <div className="text-warm-text/60 py-2">
-                请先选择服务项目和预约时间
-              </div>
+              <div className="text-warm-text/60 py-2">请先选择服务项目和预约时间</div>
             ) : (
               <div className="space-y-4">
                 {availableGroomers.length === 0 && timeSlots && (
                   <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-4">
                     <div className="flex items-center gap-2 mb-3">
                       <AlertTriangle className="w-5 h-5 text-orange-500" />
-                      <span className="font-bold text-orange-700">
-                        ⚠️ 该时段暂无空闲美容师
-                      </span>
+                      <span className="font-bold text-orange-700">⚠️ 该时段暂无空闲美容师</span>
                     </div>
 
                     {timeSlots.availableSlots.length > 0 && (
                       <div className="mb-4">
-                        <div className="text-sm font-semibold text-warm-text mb-2">
-                          推荐空档（点击选择）：
-                        </div>
+                        <div className="text-sm font-semibold text-warm-text mb-2">推荐空档（点击选择）：</div>
                         <div className="flex flex-wrap gap-2">
                           {timeSlots.availableSlots.slice(0, 5).map((slot) => (
                             <button
@@ -544,17 +772,12 @@ export default function GroomingNew() {
                     )}
 
                     <div>
-                      <div className="text-sm font-semibold text-warm-text mb-2">
-                        美容师当日忙碌时段：
-                      </div>
+                      <div className="text-sm font-semibold text-warm-text mb-2">美容师当日忙碌时段：</div>
                       <div className="space-y-2">
                         {timeSlots.groomerSchedules.map((gs) => {
                           const expanded = expandedGroomers.has(gs.groomerId);
                           return (
-                            <div
-                              key={gs.groomerId}
-                              className="rounded-lg border border-cream-coffee-200 overflow-hidden"
-                            >
+                            <div key={gs.groomerId} className="rounded-lg border border-cream-coffee-200 overflow-hidden">
                               <button
                                 type="button"
                                 onClick={() => toggleGroomerExpand(gs.groomerId)}
@@ -579,16 +802,11 @@ export default function GroomingNew() {
                               {expanded && gs.busySlots.length > 0 && (
                                 <div className="px-3 py-2 space-y-1 bg-white">
                                   {gs.busySlots.map((bs, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="flex items-center justify-between text-sm"
-                                    >
+                                    <div key={idx} className="flex items-center justify-between text-sm">
                                       <span className="text-warm-text/70">
                                         {bs.startTime} - {bs.endTime}
                                       </span>
-                                      <span className="text-warm-text font-medium">
-                                        {bs.petName}
-                                      </span>
+                                      <span className="text-warm-text font-medium">{bs.petName}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -637,9 +855,7 @@ export default function GroomingNew() {
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-3 text-sm text-red-500">
-                    当前时段暂无空闲美容师，请调整时间
-                  </div>
+                  <div className="mt-3 text-sm text-red-500">当前时段暂无空闲美容师，请调整时间</div>
                 )}
               </div>
             )}

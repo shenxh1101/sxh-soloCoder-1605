@@ -16,6 +16,10 @@ import type {
   CustomerProfile,
   CustomerDetail,
   CustomerRepurchaseStats,
+  FollowUpRecord,
+  CustomerSegmentList,
+  CustomerConsumptionTrend,
+  CustomerPreference,
 } from '../../shared/types';
 
 const BASE_URL = '/api';
@@ -225,5 +229,49 @@ export async function createAppointmentWithStatus(data: Omit<GroomingAppointment
     appointment: res.data || null,
     status,
     error: res.error,
+  };
+}
+
+export async function getUpcomingFollowUps(): Promise<FollowUpRecord[]> {
+  const res = await request<FollowUpRecord[]>('/customers/follow-ups/upcoming');
+  return res.data || [];
+}
+
+export async function createFollowUp(
+  ownerPhone: string,
+  data: { followDate: string; reason: string; note?: string }
+): Promise<FollowUpRecord> {
+  const res = await request<FollowUpRecord>(`/customers/${encodeURIComponent(ownerPhone)}/follow-ups`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  return res.data as FollowUpRecord;
+}
+
+export async function updateFollowUp(
+  id: string,
+  data: { status?: FollowUpRecord['status']; note?: string }
+): Promise<FollowUpRecord> {
+  const res = await request<FollowUpRecord>(`/customers/follow-ups/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+  return res.data as FollowUpRecord;
+}
+
+export async function getCustomerSegments(): Promise<CustomerSegmentList> {
+  const res = await request<CustomerSegmentList>('/customers/segments/lists');
+  return (res.data || { inactive60d: [], repurchase30d: [] }) as CustomerSegmentList;
+}
+
+export async function getCustomerTrend(
+  phone: string
+): Promise<{ trend: CustomerConsumptionTrend[]; preference: CustomerPreference }> {
+  const res = await request<{ trend: CustomerConsumptionTrend[]; preference: CustomerPreference }>(
+    `/customers/${encodeURIComponent(phone)}/trend`
+  );
+  return (res.data || { trend: [], preference: { topServices: [], averageSpend: 0, totalVisits: 0 } }) as {
+    trend: CustomerConsumptionTrend[];
+    preference: CustomerPreference;
   };
 }

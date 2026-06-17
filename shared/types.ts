@@ -42,6 +42,8 @@ export interface GroomingAppointment {
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   totalPrice: number;
   notes?: string;
+  ownerPhone?: string;
+  ownerName?: string;
 }
 
 export interface CareRecord {
@@ -151,7 +153,7 @@ export interface ReceiptData {
   boardingDays: number;
   dailyPrice: number;
   boardingFee: number;
-  groomingItems: Array<{ serviceName: string; price: number }>;
+  groomingItems: Array<{ serviceName: string; price: number; parsedRemarksNotes?: string }>;
   groomingFee: number;
   discount: number;
   totalAmount: number;
@@ -159,6 +161,37 @@ export interface ReceiptData {
   paidAt: string;
   remarks?: string;
   remarksFromPayment?: string;
+  parsedRemarksNotes?: string;
+}
+
+export interface FollowUpRecord {
+  id: string;
+  ownerPhone: string;
+  ownerName?: string;
+  followDate: string;
+  reason: string;
+  status: 'pending' | 'done' | 'cancelled';
+  note?: string;
+  createdAt: string;
+  handledAt?: string;
+}
+
+export interface CustomerConsumptionTrend {
+  month: string;
+  totalAmount: number;
+  boardingCount: number;
+  groomingCount: number;
+}
+
+export interface CustomerPreference {
+  topServices: Array<{ serviceName: string; count: number }>;
+  averageSpend: number;
+  totalVisits: number;
+}
+
+export interface CustomerSegmentList {
+  inactive60d: CustomerProfile[];
+  repurchase30d: CustomerProfile[];
 }
 
 export interface Trend30DaysItem {
@@ -191,6 +224,7 @@ export interface CustomerDetail extends CustomerProfile {
   pets: Array<{ petName: string; petBreed: string; petType: string }>;
   boardingHistory: BoardingOrder[];
   groomingHistory: GroomingAppointment[];
+  followUps: FollowUpRecord[];
 }
 
 export interface CustomerRepurchaseDaily {

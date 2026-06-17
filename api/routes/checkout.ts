@@ -3,6 +3,7 @@ import { getDb } from '../db/index.js';
 import { success, error } from '../utils/response.js';
 import { calculateFee } from '../services/feeService.js';
 import type { Payment } from '../types/index.js';
+import { ensureCustomer } from '../utils/customer.js';
 
 const router = Router();
 
@@ -137,6 +138,9 @@ router.post('/pay', async (req: Request, res: Response): Promise<void> => {
     checkOutDate: getToday(),
   };
 
+  const boardingOrder = db.data.boardingOrders[boardingIdx];
+  ensureCustomer(db, boardingOrder.ownerPhone, boardingOrder.ownerName);
+
   db.write();
 
   res.json(success({ payment, boarding: db.data.boardingOrders[boardingIdx] }));
@@ -174,7 +178,71 @@ router.get('/receipt/:boardingId', async (req: Request, res: Response): Promise<
     }
   }
 
-  if (groomingItems.length === 0 && payment.groomingFee > 0) {
+  let parsedRemarksNotes: string | undefined;
+
+  if (groomingItems.length === 0 && payment.groomingFee > 0 && payment.remarks) {
+    const knownServices: Array<{ name: string; price: number }> = [
+      { name: '基础洗澡', price: 80 },
+      { name: '精致洗护', price: 150 },
+      { name: '美容造型', price: 200 },
+      { name: 'SPA护理', price: 180 },
+      { name: '局部修剪', price: 60 },
+      { name: '药浴', price: 120 },
+    ];
+
+    const matchedServices: Array<{ name: string; price: number }> = [];
+    for (const svc of knownServices) {
+      if (payment.remarks.includes(svc.name)) {
+        matchedServices.push(svc);
+      }
+    }
+
+    if (matchedServices.length > 0) {
+      const matchedTotal = matchedServices.reduce((sum, s) => sum + s.price, 0);
+      if (matchedTotal <= payment.groomingFee && matchedTotal > 0) {
+        for (const s of matchedServices) {
+          groomingItems.push({
+            serviceName: s.name,
+            price: s.price,
+          });
+        }
+        const remaining = payment.groomingFee - matchedTotal;
+        if (remaining > 0) {
+          groomingItems.push({
+            serviceName: '其他美容服务',
+            price: remaining,
+          });
+        }
+      } else {
+        const avgPrice = Math.floor(payment.groomingFee / matchedServices.length);
+        const remainder = payment.groomingFee - avgPrice * matchedServices.length;
+        for (let i = 0; i < matchedServices.length; i++) {
+          groomingItems.push({
+            serviceName: matchedServices[i].name,
+            price: i === 0 ? avgPrice + remainder : avgPrice,
+          });
+        }
+      }
+    } else {
+      let remarksText = payment.remarks;
+      remarksText = remarksText.replace(/寄养\d+天[+]?/g, '').trim();
+      remarksText = remarksText.replace(/散客[:：]?[^+]*[+]?/g, '').trim();
+      remarksText = remarksText.replace(/^[+]/, '').trim();
+
+      if (remarksText) {
+        parsedRemarksNotes = remarksText;
+        groomingItems.push({
+          serviceName: `美容服务（备注：${remarksText}）`,
+          price: payment.groomingFee,
+        });
+      } else {
+        groomingItems.push({
+          serviceName: `美容服务（备注）`,
+          price: payment.groomingFee,
+        });
+      }
+    }
+  } else if (groomingItems.length === 0 && payment.groomingFee > 0) {
     groomingItems.push({
       serviceName: `美容服务（备注）`,
       price: payment.groomingFee,
@@ -205,6 +273,7 @@ router.get('/receipt/:boardingId', async (req: Request, res: Response): Promise<
       paidAt: payment.paidAt,
       remarks: payment.remarks,
       remarksFromPayment: payment.remarks,
+      parsedRemarksNotes,
     }),
   );
 });

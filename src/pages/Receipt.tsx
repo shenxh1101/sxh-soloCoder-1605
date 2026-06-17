@@ -36,6 +36,34 @@ function generateReceiptNo(paidAt: string, boardingId: string): string {
   return `REC-${y}${m}${d}-${suffix}`;
 }
 
+function resolveGroomingDisplayItems(data: ReceiptData): Array<{ serviceName: string; price: number }> {
+  const items = data.groomingItems;
+  if (items.length === 0) return [];
+
+  const hasParsedNotes = items.some((item) => item.parsedRemarksNotes);
+  const isSingleFallback =
+    items.length === 1 && items[0].serviceName === '美容服务（备注）';
+
+  if (!isSingleFallback && !hasParsedNotes) {
+    return items.map((item) => ({ serviceName: item.serviceName, price: item.price }));
+  }
+
+  const displayNames: string[] = [];
+  for (const item of items) {
+    if (item.parsedRemarksNotes) {
+      displayNames.push(item.parsedRemarksNotes);
+    } else if (item.serviceName !== '美容服务（备注）') {
+      displayNames.push(item.serviceName);
+    }
+  }
+
+  if (displayNames.length === 0) {
+    return items.map((item) => ({ serviceName: item.serviceName, price: item.price }));
+  }
+
+  return [{ serviceName: displayNames.join(' + '), price: data.groomingFee }];
+}
+
 function buildReceiptText(data: ReceiptData): string {
   const receiptNo = generateReceiptNo(data.paidAt, data.boardingId);
   const pm = paymentMethodMeta[data.paymentMethod];
@@ -48,10 +76,12 @@ function buildReceiptText(data: ReceiptData): string {
   lines.push(`主人：${data.ownerName} ${data.ownerPhone}`);
   lines.push(`入住：${data.checkInDate}  离店：${data.checkOutDate}`);
   lines.push(`寄养：${data.boardingDays}天 × ¥${data.dailyPrice}/天 = ¥${data.boardingFee}`);
-  if (data.groomingItems.length > 0) {
+
+  const displayItems = resolveGroomingDisplayItems(data);
+  if (displayItems.length > 0) {
     lines.push('----------------------------------------');
     lines.push('美容项目：');
-    for (const item of data.groomingItems) {
+    for (const item of displayItems) {
       lines.push(`  ${item.serviceName}  ￥${item.price}`);
     }
     lines.push(`美容小计：￥${data.groomingFee}`);
@@ -60,6 +90,7 @@ function buildReceiptText(data: ReceiptData): string {
     lines.push('美容费用：');
     lines.push(`  ${data.remarksFromPayment}`);
   }
+
   lines.push('----------------------------------------');
   lines.push(`小计：￥${data.boardingFee + data.groomingFee}`);
   if (data.discount > 0) {
@@ -149,6 +180,7 @@ export default function Receipt() {
   const receiptNo = generateReceiptNo(data.paidAt, data.boardingId);
   const pm = paymentMethodMeta[data.paymentMethod];
   const subtotal = data.boardingFee + data.groomingFee;
+  const displayGroomingItems = resolveGroomingDisplayItems(data);
 
   return (
     <div className="flex flex-col gap-6 pb-12">
@@ -245,7 +277,7 @@ export default function Receipt() {
             </div>
           </div>
 
-          {data.groomingItems.length > 0 ? (
+          {displayGroomingItems.length > 0 ? (
             <>
               <div
                 className="border-t border-dashed my-5"
@@ -253,7 +285,7 @@ export default function Receipt() {
               />
               <div className="text-sm text-warm-text/60 mb-2">美容项目</div>
               <div className="space-y-1.5">
-                {data.groomingItems.map((item, idx) => (
+                {displayGroomingItems.map((item, idx) => (
                   <div
                     key={idx}
                     className="flex items-center justify-between text-sm"
